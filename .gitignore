@@ -1,0 +1,40 @@
+# Django
+*.log
+*.pot
+*.pyc
+__pycache__/
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+media/
+
+# Environment
+.env
+.venv
+venv/
+ENV/
+env/
+
+# Docker
+.docker/
+postgres_data/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Frontend
+node_modules/
+dist/
+.next/
+out/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
