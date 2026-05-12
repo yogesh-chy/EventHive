@@ -1,6 +1,4 @@
-import uuid
 from django.db import models
-from django.utils import timezone
 
 class SoftDeleteManager(models.Manager):
     def get_queryset(self):

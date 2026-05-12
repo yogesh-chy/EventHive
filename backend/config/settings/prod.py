@@ -1,5 +1,7 @@
-from .base import *
+from .base import *  # noqa: F403, F405
 import dj_database_url
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
 
 DEBUG = False
 
@@ -30,10 +32,7 @@ MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Sentry
-import sentry_sdk
-from sentry_sdk.integrations.django import DjangoIntegration
-
-SENTRY_DSN = config('SENTRY_DSN', default=None)
+SENTRY_DSN = config('SENTRY_DSN', default=None)  # noqa: F405
 if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,

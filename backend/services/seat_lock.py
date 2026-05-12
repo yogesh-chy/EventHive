@@ -1,6 +1,3 @@
-import redis
-from django.conf import settings
-
 class SeatLockService:
     """
     Service to handle atomic seat locking using Redis.
