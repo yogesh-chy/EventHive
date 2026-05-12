@@ -1,4 +1,5 @@
-from .base import *  # noqa: F403, F405
+from decouple import config
+from .base import *  # noqa: F403
 import dj_database_url
 import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
@@ -28,7 +29,7 @@ DATABASES = {
 
 # Static files
 # WhiteNoise handles static files in production without Nginx if needed
-MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')  # noqa: F405
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Sentry

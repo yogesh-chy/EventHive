@@ -1,4 +1,5 @@
-from .base import *  # noqa: F403, F405
+from decouple import config
+from .base import *  # noqa: F403
 import dj_database_url
 
 DEBUG = True
