@@ -1,5 +1,6 @@
 from datetime import timedelta
 from pathlib import Path
+import dj_database_url
 
 from decouple import Csv, config
 
@@ -7,7 +8,7 @@ from decouple import Csv, config
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # ---- Security ----
-SECRET_KEY = config("SECRET_KEY")
+SECRET_KEY = config("DJANGO_SECRET_KEY", default=config("SECRET_KEY", default="django-insecure-dev-key"))
 DEBUG = config("DEBUG", default=False, cast=bool)
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv())
 
@@ -81,15 +82,10 @@ TEMPLATES = [
 
 # ---- Database ----
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": config("POSTGRES_DB", default="eventhive"),
-        "USER": config("POSTGRES_USER", default="eventhive"),
-        "PASSWORD": config("POSTGRES_PASSWORD"),
-        "HOST": config("POSTGRES_HOST", default="localhost"),
-        "PORT": config("POSTGRES_PORT", default="5432"),
-        "CONN_MAX_AGE": 60,
-    }
+    "default": dj_database_url.config(
+        default=f"postgres://{config('POSTGRES_USER', default='eventhive')}:{config('POSTGRES_PASSWORD', default='Secret@123')}@{config('POSTGRES_HOST', default='localhost')}:{config('POSTGRES_PORT', default='5432')}/{config('POSTGRES_DB', default='eventhive')}",
+        conn_max_age=60,
+    )
 }
 
 # ---- Custom User Model ----
