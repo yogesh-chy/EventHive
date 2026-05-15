@@ -35,10 +35,10 @@ The project follows a **Layered Monolith** pattern with clear separation of conc
 | **DRF 3.x** | RESTful API development & Serialization. |
 | **Channels 4.x** | WebSocket support for real-time updates. |
 | **PostgreSQL 16** | Primary relational store with Full-Text Search. |
-| **Redis 7** | Celery broker, caching, and atomic seat locking. |
+| **Redis 7** | Celery broker, caching, and atomic seat locking (WSL2). |
 | **Celery 5.x** | Distributed task queue for async processing. |
 | **Stripe SDK** | Payment processing and idempotent webhook handling. |
-| **Docker** | Containerization for consistent Dev/Prod environments. |
+| **WSL2** | Running Redis 7 in a native Linux environment on Windows. |
 
 ---
 
@@ -66,8 +66,9 @@ backend/
 ## Getting Started
 
 ### Prerequisites
-- Docker Desktop
-- Make (Optional)
+- **Python 3.12+**
+- **PostgreSQL 16** (Running locally)
+- **Redis 7** (Running via WSL2 on Windows)
 
 ### Installation
 
@@ -77,22 +78,34 @@ backend/
    cd eventhive/backend
    ```
 
-2. **Initialize Environment**:
+2. **Setup Virtual Environment**:
+   ```powershell
+   python -m venv venv
+   .\venv\Scripts\activate
+   ```
+
+3. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Initialize Environment**:
    ```bash
    cp .env.example .env
+   # Update .env with your local DB and Redis credentials
    ```
 
-3. **Spin up the stack**:
+5. **Initialize Database**:
    ```bash
-   docker-compose up --build
+   python manage.py makemigrations
+   python manage.py migrate
+   python manage.py createsuperuser
    ```
 
-4. **Initialize Database**:
-   ```bash
-   docker-compose exec web python manage.py makemigrations users
-   docker-compose exec web python manage.py migrate
-   docker-compose exec web python manage.py createsuperuser
-   ```
+6. **Start Services**:
+   - Ensure Redis is running in WSL: `sudo service redis-server start`
+   - Start Django: `python manage.py runserver` (or `make run`)
+   - Start Celery: `celery -A config worker -l info`
 
 ---
 
@@ -108,9 +121,9 @@ backend/
 
 ## API Documentation
 
-- **Admin Panel**: `http://localhost/admin/`
-- **Swagger UI**: `http://localhost/api/v1/schema/swagger-ui/`
-- **Redoc**: `http://localhost/api/v1/schema/redoc/`
+- **Admin Panel**: `http://localhost:8000/admin/`
+- **Swagger UI**: `http://localhost:8000/api/v1/schema/swagger-ui/`
+- **Redoc**: `http://localhost:8000/api/v1/schema/redoc/`
 
 ---
 
