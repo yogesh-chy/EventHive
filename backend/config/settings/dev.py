@@ -1,4 +1,4 @@
-from .base import *
+from .base import *  # noqa: F403
 
 DEBUG = True
 
@@ -8,11 +8,11 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 CORS_ALLOW_ALL_ORIGINS = True
 
-INSTALLED_APPS += ["silk"]
-MIDDLEWARE += ["silk.middleware.SilkyMiddleware"]
+INSTALLED_APPS += ["silk"]  # noqa: F405
+MIDDLEWARE += ["silk.middleware.SilkyMiddleware"]  # noqa: F405
 
 
-REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
+REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {  # noqa: F405
     "user": "1000/minute",
     "auth": "100/minute",
 }

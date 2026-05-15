@@ -1,4 +1,7 @@
-from .base import *
+import sentry_sdk
+from sentry_sdk.integrations.celery import CeleryIntegration
+from sentry_sdk.integrations.django import DjangoIntegration
+from .base import *  # noqa: F403
 DEBUG = False
 
 # ---- Security hardening ----
@@ -20,12 +23,8 @@ EMAIL_HOST_USER = config("EMAIL_HOST_USER")       # noqa: F405
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")  # noqa: F405
 
 # ---- Sentry ----
-import sentry_sdk
-from sentry_sdk.integrations.django import DjangoIntegration
-from sentry_sdk.integrations.celery import CeleryIntegration
-from decouple import config  # noqa: F811
 
-SENTRY_DSN = config("SENTRY_DSN", default="")
+SENTRY_DSN = config("SENTRY_DSN", default="")  # noqa: F405
 if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
