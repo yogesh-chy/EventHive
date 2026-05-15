@@ -1,43 +1,40 @@
-from decouple import config
-from .base import *  # noqa: F403
-import dj_database_url
-import sentry_sdk
-from sentry_sdk.integrations.django import DjangoIntegration
+# config/settings/prod.py — Production hardening
+from .base import *  # noqa: F401, F403
 
 DEBUG = False
 
-# Security settings
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
-
-# SECURE_SSL_REDIRECT = True
+# ─── Security hardening ───────────────────────────────────────────────────────
+SECURE_SSL_REDIRECT = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
-SECURE_BROWSER_XSS_FILTER = True
-SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_HSTS_SECONDS = 31536000  # 1 year
+SECURE_HSTS_SECONDS = 31536000        # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
 
-# Database
-DATABASES = {
-    'default': dj_database_url.config(
-        default=config('DATABASE_URL'),
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
-}
+# ─── Email ────────────────────────────────────────────────────────────────────
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = config("EMAIL_HOST")       # noqa: F405
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)  # noqa: F405
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = config("EMAIL_HOST_USER")       # noqa: F405
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")  # noqa: F405
 
-# Static files
-# WhiteNoise handles static files in production without Nginx if needed
-MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')  # noqa: F405
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# ─── Sentry ───────────────────────────────────────────────────────────────────
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
+from sentry_sdk.integrations.celery import CeleryIntegration
+from decouple import config  # noqa: F811
 
-# Sentry
-SENTRY_DSN = config('SENTRY_DSN', default=None)  # noqa: F405
+SENTRY_DSN = config("SENTRY_DSN", default="")
 if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
-        integrations=[DjangoIntegration()],
-        traces_sample_rate=1.0,
-        send_default_pii=True
+        integrations=[DjangoIntegration(), CeleryIntegration()],
+        traces_sample_rate=0.1,   # 10% of transactions sampled
+        send_default_pii=False,   # GDPR: no PII in Sentry
     )
+
+# ─── Static files (served by Nginx in prod) ───────────────────────────────────
+STATICFILES_STORAGE = "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"

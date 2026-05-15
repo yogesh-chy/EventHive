@@ -16,9 +16,7 @@ venv/
 ENV/
 env/
 
-# Docker
-.docker/
-postgres_data/
+
 
 # IDEs
 .vscode/

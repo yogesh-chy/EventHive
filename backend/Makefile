@@ -1,26 +1,17 @@
-build:
-	docker-compose build
-
-up:
-	docker-compose up -d
-
-down:
-	docker-compose down
-
 migrate:
-	docker-compose exec web python manage.py migrate
+	python manage.py migrate
 
 migrations:
-	docker-compose exec web python manage.py makemigrations
+	python manage.py makemigrations
 
 superuser:
-	docker-compose exec web python manage.py createsuperuser
+	python manage.py createsuperuser
 
 shell:
-	docker-compose exec web python manage.py shell
+	python manage.py shell
 
 test:
-	docker-compose exec web pytest
+	pytest
 
-logs:
-	docker-compose logs -f
+run:
+	python manage.py runserver
