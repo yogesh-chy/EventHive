@@ -1,9 +1,7 @@
-# config/settings/prod.py — Production hardening
-from .base import *  # noqa: F401, F403
-
+from .base import *
 DEBUG = False
 
-# ─── Security hardening ───────────────────────────────────────────────────────
+# ---- Security hardening ----
 SECURE_SSL_REDIRECT = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
@@ -13,7 +11,7 @@ SECURE_HSTS_PRELOAD = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 
-# ─── Email ────────────────────────────────────────────────────────────────────
+# ---- Email ----
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = config("EMAIL_HOST")       # noqa: F405
 EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)  # noqa: F405
@@ -21,7 +19,7 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = config("EMAIL_HOST_USER")       # noqa: F405
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")  # noqa: F405
 
-# ─── Sentry ───────────────────────────────────────────────────────────────────
+# ---- Sentry ----
 import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
 from sentry_sdk.integrations.celery import CeleryIntegration
@@ -36,5 +34,5 @@ if SENTRY_DSN:
         send_default_pii=False,   # GDPR: no PII in Sentry
     )
 
-# ─── Static files (served by Nginx in prod) ───────────────────────────────────
+# ---- Static files (served by Nginx in prod) ----
 STATICFILES_STORAGE = "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"

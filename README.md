@@ -105,7 +105,7 @@ backend/
 6. **Start Services**:
    - Ensure Redis is running in WSL: `sudo service redis-server start`
    - Start Django: `python manage.py runserver` (or `make run`)
-   - Start Celery: `celery -A config worker -l info`
+   - Start Celery: `celery -A config worker -l info --pool=solo` (or `make worker`)
 
 ---
 
