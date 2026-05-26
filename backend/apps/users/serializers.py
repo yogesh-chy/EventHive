@@ -34,7 +34,7 @@ class UserRegisterSerializer(serializers.Serializer):
     def validate_email(self, value:str) -> str:
         normalized = value.lower().strip()
         if User.objects.filter(email=normalized).exists():
-            return serializers.ValidationError("An account with this email already exists.")
+            raise serializers.ValidationError("An account with this email already exists.")
         return normalized
     
     def validate_password(self, value:str) -> str:
@@ -87,7 +87,7 @@ class EmailVerifySerializer(serializers.Serializer):
         return value
     
     def save(self) -> User:
-        verification: EmailVerificatonToken = self.context["verifiaction"]
+        verification: EmailVerificatonToken = self.context["verification"]
         user = verification.user
         user.is_verified = True
         user.save(update_fields=["is_verified", "update_at"])
@@ -136,23 +136,23 @@ class LoginSerializer(TokenObtainPairSerializer):
         return token
 
 # ------Profile-----
-class UserProfileSerializer(serializers.Serializer):
+class UserProfileSerializer(serializers.ModelSerializer):
     avatar_url = serializers.SerializerMethodField(help_text="Presigned S3 URL (1hr expiry). Do not cache beyond expiry.")
 
     class Meta:
         model = User
-        fields = ["id", "email", "full_name", "role", "avatar_url", "is_verified", "last_login_at", "created_at",]
-        read_only_fields = ["id", "email", "role", "is_verified", "last_login_at", "created_at"]
-    
+        fields = ["id", "email", "full_name", "role", "avatar_url", "is_verified", "last_login_at"]
+        read_only_fields = ["id", "email", "role", "is_verified", "last_login_at"]
+
     def get_avatar_url(self, obj: User) -> str | None:
         if not obj.avatar:
             return None
         return None
-    
-class UserProfileUpdateSerializer(serializers.Serializer):
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["full_name"]
-    
+
     def validate_full_name(self, value: str) -> str:
         return value.strip()

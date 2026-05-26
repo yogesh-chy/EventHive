@@ -13,6 +13,7 @@ MIDDLEWARE += ["silk.middleware.SilkyMiddleware"]  # noqa: F405
 
 
 REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {  # noqa: F405
+    "anon": "60/minute",
     "user": "1000/minute",
     "auth": "100/minute",
 }

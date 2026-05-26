@@ -37,7 +37,7 @@ class VerifyEmailView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        serializer = EmailVerifySerializer(request=request.data, context={"request":request})
+        serializer = EmailVerifySerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         return Response(
