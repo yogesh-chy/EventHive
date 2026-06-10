@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, EmailVerificatonToken
+from .models import User, EmailVerificationToken
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
@@ -26,7 +26,7 @@ class UserAdmin(BaseUserAdmin):
     ordering = ("email",)
     filter_horizontal = ("groups", "user_permissions")
 
-@admin.register(EmailVerificatonToken)
+@admin.register(EmailVerificationToken)
 class EmailVerificationTokenAdmin(admin.ModelAdmin):
     list_display = ("user", "created_at", "expires_at", "is_expired")
     search_fields = ("user__email",)

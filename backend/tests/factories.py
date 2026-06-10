@@ -2,8 +2,10 @@ import factory
 from factory.django import DjangoModelFactory
 from faker import Faker
 
+from django.utils import timezone
 from apps.organizations.models import Membership, Organization
 from apps.users.models import User
+from apps.events.models import Event, TicketTier
 
 fake = Faker()
 
@@ -71,3 +73,33 @@ class MembershipFactory(DjangoModelFactory):
     user = factory.SubFactory(UserFactory)
     org = factory.SubFactory(OrganizationFactory)
     role = Membership.Role.MEMBER
+
+
+class EventFactory(DjangoModelFactory):
+    class Meta:
+        model = Event
+
+    title = factory.Sequence(lambda n: f"Event {n}")
+    slug = factory.Sequence(lambda n: f"event-{n}")
+    org = factory.SubFactory(OrganizationFactory)
+    description = factory.LazyAttribute(lambda o: f"Description for {o.title}")
+    venue = "Main Hall"
+    city = "San Francisco"
+    country = "US"
+    start_datetime = factory.LazyFunction(lambda: timezone.now() + timezone.timedelta(days=2))
+    end_datetime = factory.LazyFunction(lambda: timezone.now() + timezone.timedelta(days=3))
+    status = "PUBLISHED"
+    total_capacity = 100
+    tickets_sold = 0
+
+
+class TicketTierFactory(DjangoModelFactory):
+    class Meta:
+        model = TicketTier
+
+    event = factory.SubFactory(EventFactory)
+    name = factory.Sequence(lambda n: f"Tier {n}")
+    price = 20.00
+    quantity = 50
+    quantity_sold = 0
+    is_active = True

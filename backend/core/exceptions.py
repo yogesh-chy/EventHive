@@ -1,109 +1,194 @@
-import logging
+"""
+core/exceptions.py  ·  PHASE 1
 
+Custom DRF exception handler and application-specific exception classes.
+
+Predicted problems addressed:
+──────────────────────────────
+1.  DRF's default error format is inconsistent:
+      400: {"field": ["message"]}   OR   {"detail": "message"}
+    Clients must handle two shapes. Our handler normalises ALL errors to:
+      {
+        "errors": [
+          {"code": "invalid", "detail": "Human message.", "attr": "field_name"},
+          ...
+        ]
+      }
+    This is a superset of RFC 7807 Problem Details and works with any client.
+
+2.  Unhandled Python exceptions (500s) leak stack traces. The handler
+    catches them in DEBUG=False mode, logs the traceback, and returns a
+    safe generic envelope.
+
+3.  ValidationError can contain nested dicts (serializer.errors) — the
+    handler recursively flattens them so no nested parsing is needed.
+
+4.  HTTP 404 and 403 from Django middleware are not DRF exceptions; they
+    arrive as plain Django responses. handler404 / handler403 are wired
+    in urls.py to produce the same JSON envelope.
+
+Wire up in settings:
+    REST_FRAMEWORK = {
+        "EXCEPTION_HANDLER": "core.exceptions.custom_exception_handler",
+    }
+"""
+
+import logging
+from typing import Any
+
+from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import Http404
 from rest_framework import status
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
-from rest_framework.views import exception_handler as drf_exception_handler
+from rest_framework.views import exception_handler as drf_default_handler
 
 logger = logging.getLogger(__name__)
 
-# ----Custom exceptions----
 
-class EventHiveAPIException(APIException):
-    status_code = status.HTTP_400_BAD_REQUEST
-    default_detail = "An error occured."
-    default_code = "error"
+# ── Normalisation helpers ─────────────────────────────────────────────────────
 
-class ResourceNotFound(EventHiveAPIException):
-    status_code = status.HTTP_404_NOT_FOUND
-    default_detail = "The requested rescource was not found."
-    default_code = "not_found"
+def _flatten_errors(detail: Any, attr: str | None = None) -> list[dict]:
+    """
+    Recursively flatten DRF's nested error structures into a flat list:
+    [{"code": str, "detail": str, "attr": str | null}]
 
-class PermissionDenied(EventHiveAPIException):
-    status_code = status.HTTP_403_FORBIDDEN
-    default_detail = "You do not have permission to perform this action."
-    default_code = "permission_denied"
-
-class ConflictError(EventHiveAPIException):
-    status_code = status.HTTP_409_CONFLICT
-    default_detail = "An conflict occur."
-    default_code = "conflict"
-
-class UnprocessableEntity(EventHiveAPIException):
-    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
-    default_detail = "Validation failed."
-    default_code = "unprocessable_entity"
-
-class ServiceUnavailable(EventHiveAPIException):
-    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-    default_detail = "Service temporarily unavailable. Please try again."
-    default_code = "service_unavailable"
-
-
-# ----Response Envelope-----
-
-def _build_error_response(errors: list, status_code: int) -> Response:
-    return Response(
-        {"success":False, "errors": errors},
-        status=status_code
-    )
-
-def _normalize_drf_errors(detail) -> list:
-
+    Handles:
+      - Single ErrorDetail
+      - List of ErrorDetails
+      - Dict of {field: [ErrorDetails]}  (serializer field errors)
+      - Non-string scalar (should not occur, but handled defensively)
+    """
     errors = []
 
     if isinstance(detail, dict):
-        for field, messages in detail.items():
-            if isinstance(messages, list):
-                for msg in messages:
-                    errors.append({"field": field, "message": str(msg)})
-            elif isinstance(messages, dict):
-                for sub_field, sub_msgs in messages.items():
-                    for msg in (sub_msgs if isinstance(sub_msgs, list) else [sub_msgs]):
-                        errors.append(
-                            {"field": f"{field}.{sub_field}", "message": str(msg)}
-                        )
-            else:
-                errors.append({"field": field, "message": str(messages)})
+        for field, value in detail.items():
+            errors.extend(_flatten_errors(value, attr=field))
 
     elif isinstance(detail, list):
         for item in detail:
-            if isinstance(item, dict):
-                errors.extend(_normalize_drf_errors(item))
-            else:
-                errors.append({"field": "non_field_errors", "message": str(item)})
+            errors.extend(_flatten_errors(item, attr=attr))
+
     else:
-        errors.append({"field": "non_field_errors", "message": str(detail)})
+        code = getattr(detail, "code", "error")
+        errors.append({
+            "code": code,
+            "detail": str(detail),
+            "attr": attr,
+        })
 
     return errors
 
 
-# ----Main Exception handler----
+def _make_envelope(errors: list[dict]) -> dict:
+    return {"success": False, "errors": errors}
 
-def custom_exception_handler(exc, context):
 
-    response = drf_exception_handler(exc, context)
+# ── Main handler ──────────────────────────────────────────────────────────────
 
-    if response is None and isinstance(exc, DjangoValidationError):
-        messages = exc.messages if hasattr(exc, "messages") else [str(exc)]
-        errors = [{"field": "non_field_errors", "message": m} for m in messages]
-        return _build_error_response(errors, status.HTTP_400_BAD_REQUEST)
+def custom_exception_handler(exc: Exception, context: dict) -> Response | None:
+    """
+    Drop-in replacement for DRF's default exception handler.
+    All API error responses share the same JSON envelope.
+
+    Settings:
+        REST_FRAMEWORK["EXCEPTION_HANDLER"] = "core.exceptions.custom_exception_handler"
+    """
+
+    # Convert Django core exceptions to DRF equivalents so they pass
+    # through the standard handler and get proper HTTP status codes.
+    if isinstance(exc, DjangoValidationError):
+        exc = ValidationError(detail=exc.message_dict if hasattr(exc, "message_dict") else exc.messages)
+
+    if isinstance(exc, Http404):
+        exc = APIException()
+        exc.status_code = status.HTTP_404_NOT_FOUND
+        exc.detail = "Not found."  # type: ignore[attr-defined]
+
+    if isinstance(exc, DjangoPermissionDenied):
+        exc = APIException()
+        exc.status_code = status.HTTP_403_FORBIDDEN
+        exc.detail = "Permission denied."  # type: ignore[attr-defined]
+
+    # Let DRF set the response for known exceptions (4xx).
+    response = drf_default_handler(exc, context)
 
     if response is None:
+        # Unhandled exception — this will become a 500.
+        # Log with full traceback; return a safe response.
         logger.exception(
-            "Unhandled exception in view %s",
-            context.get("view", "unknown"),
-            exc_info=exc,
+            "Unhandled exception in %s.%s",
+            context.get("view").__class__.__name__ if context.get("view") else "unknown",
+            context.get("request").method if context.get("request") else "unknown",
         )
-        return _build_error_response(
-            [{"field": "non_field_errors", "message": "An unexpected error occurred."}],
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
+        return Response(
+            _make_envelope([{"code": "server_error", "detail": "An unexpected error occurred.", "attr": None}]),
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-    if isinstance(exc, ValidationError):
-        errors = _normalize_drf_errors(exc.detail)
-    else:
-        errors = [{"field": "non_field_errors", "message": str(exc.detail)}]
+    # Normalise the response data into our envelope.
+    errors = _flatten_errors(response.data)
+    response.data = _make_envelope(errors)
+    return response
 
-    return _build_error_response(errors, response.status_code)
+
+# ── Custom application exceptions ─────────────────────────────────────────────
+
+class EventHiveAPIException(APIException):
+    """
+    Base class for all EventHive-specific exceptions.
+    Subclass this to add domain-specific error codes.
+    """
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_code = "eventhive_error"
+    default_detail = "A business rule was violated."
+
+
+class InvalidStatusTransitionError(EventHiveAPIException):
+    """Raised when a status transition is not allowed by the state machine."""
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "invalid_status_transition"
+    default_detail = "This status transition is not permitted."
+
+
+class InsufficientInventoryError(EventHiveAPIException):
+    """Raised when a ticket purchase exceeds available inventory."""
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "insufficient_inventory"
+    default_detail = "Insufficient ticket inventory for this request."
+
+
+class SeatAlreadyReservedError(EventHiveAPIException):
+    """Raised when a seat lock already exists (Phase 3 — checkout flow)."""
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "seat_already_reserved"
+    default_detail = "The requested seats are temporarily reserved by another session."
+
+
+class OrganizationAccessDeniedError(EventHiveAPIException):
+    """Raised when a user attempts to access data outside their org scope."""
+    status_code = status.HTTP_403_FORBIDDEN
+    default_code = "org_access_denied"
+    default_detail = "You do not have access to this organization."
+
+
+class PublishValidationError(EventHiveAPIException):
+    """Raised when an event fails publish pre-condition checks."""
+    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    default_code = "publish_validation_failed"
+    default_detail = "Event does not meet the requirements for publishing."
+
+
+# Backward compatibility exceptions used in organizations services
+class ResourceNotFound(EventHiveAPIException):
+    status_code = status.HTTP_404_NOT_FOUND
+    default_code = "not_found"
+    default_detail = "The requested resource was not found."
+
+
+class ConflictError(EventHiveAPIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "conflict"
+    default_detail = "A conflict occurred."
+

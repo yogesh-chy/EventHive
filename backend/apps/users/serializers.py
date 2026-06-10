@@ -8,7 +8,10 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from .models import User, EmailVerificatonToken
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+from .models import User, EmailVerificationToken
 
 # ------Helpers-----
 def _hash_token(raw_token: str) -> str:
@@ -19,8 +22,8 @@ def _generate_and_store_verification_token(user: User) -> str:
     hashed = _hash_token(raw_token)
     expires_at = timezone.now() + timedelta(hours=getattr(settings, "EMAIL_VERIFICATION_EXPIRY_HOURS", 24))
 
-    EmailVerificatonToken.objects.filter(user=user).delete()
-    EmailVerificatonToken.objects.create(user=user, token_hash=hashed, expires_at=expires_at)
+    EmailVerificationToken.objects.filter(user=user).delete()
+    EmailVerificationToken.objects.create(user=user, token_hash=hashed, expires_at=expires_at)
 
     return raw_token
 
@@ -76,8 +79,8 @@ class EmailVerifySerializer(serializers.Serializer):
     def validate_token(self, value:str):
         hashed = _hash_token(value.strip())
         try:
-            verification = EmailVerificatonToken.objects.select_related("user").get(token_hash=hashed)
-        except EmailVerificatonToken.DoesNotExist:
+            verification = EmailVerificationToken.objects.select_related("user").get(token_hash=hashed)
+        except EmailVerificationToken.DoesNotExist:
             raise serializers.ValidationError("Invalid or expired verification link.")
         
         if verification.user.is_verified:
@@ -87,10 +90,10 @@ class EmailVerifySerializer(serializers.Serializer):
         return value
     
     def save(self) -> User:
-        verification: EmailVerificatonToken = self.context["verification"]
+        verification: EmailVerificationToken = self.context["verification"]
         user = verification.user
         user.is_verified = True
-        user.save(update_fields=["is_verified", "update_at"])
+        user.save(update_fields=["is_verified"])
         return user
     
 
@@ -152,7 +155,64 @@ class UserProfileSerializer(serializers.ModelSerializer):
 class UserProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["full_name"]
+        fields = ["full_name", "avatar"]
 
     def validate_full_name(self, value: str) -> str:
         return value.strip()
+
+
+# ------Password Reset-----
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+    def save(self):
+        email = self.validated_data["email"]
+        try:
+            user = User.objects.get(email=email, is_active=True)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            reset_url = f"{settings.FRONTEND_URL}/auth/password-reset/confirm?uid={uid}&token={token}"
+            
+            subject = "Reset your EventHive password"
+            message = (
+                f"Hello {user.full_name},\n\n"
+                f"You requested a password reset. Please click the link below to set a new password:\n{reset_url}\n\n"
+                f"If you did not request this, please ignore this email.\n\nEventHive Team"
+            )
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=False
+            )
+        except User.DoesNotExist:
+            pass
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(min_length=8, write_only=True)
+
+    def validate(self, attrs):
+        try:
+            uid = force_str(urlsafe_base64_decode(attrs["uid"]))
+            user = User.objects.get(pk=uid, is_active=True)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            raise serializers.ValidationError({"token": "Invalid or expired password reset link."})
+
+        if not default_token_generator.check_token(user, attrs["token"]):
+            raise serializers.ValidationError({"token": "Invalid or expired password reset link."})
+
+        attrs["user"] = user
+        return attrs
+
+    def save(self):
+        user = self.validated_data["user"]
+        user.set_password(self.validated_data["new_password"])
+        user.save()
+        return user

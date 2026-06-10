@@ -27,6 +27,7 @@ THIRD_PARTY_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
+    "django_filters",
     "drf_spectacular",
 ]
 
@@ -34,18 +35,19 @@ LOCAL_APPS = [
     "core",
     "apps.users",
     "apps.organizations",
-    # Phase 2+
-    # "apps.events",
+    "apps.events",
+    "apps.audit",
+    # Phase 3+
     # "apps.orders",
     # "apps.tickets",
     # "apps.notifications",
-    # "apps.audit",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 # ---- Middleware ----
 MIDDLEWARE = [
+    "core.middleware.RequestIDMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -54,6 +56,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.StructuredRequestLogMiddleware",
     "core.middleware.AuditContextMiddleware",
     "core.middleware.QueryTimingMiddleware",
 ]
@@ -165,7 +168,7 @@ REST_FRAMEWORK = {
         "user": "300/minute",
         "auth": "10/minute",
     },
-    "DEFAULT_PAGINATION_CLASS": "core.pagination.CursorPagination",
+    "DEFAULT_PAGINATION_CLASS": "core.pagination.EventCursorPagination",
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "core.exceptions.custom_exception_handler",
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",

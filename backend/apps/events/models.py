@@ -12,11 +12,11 @@ class EventStatus(models.TextChoices):
     CANCELLED = "CANCELLED", "Cancelled"
     COMPLETED = "COMPLETED", "Completed"
 
-EVENT_STATUS_TRANSITIONS : dict[str, set[str]] = {
+EVENT_STATUS_TRANSITIONS: dict[str, set[str]] = {
     EventStatus.DRAFT: {EventStatus.PUBLISHED, EventStatus.CANCELLED},
-    EventStatus.DRAFT: {EventStatus.CANCELLED, EventStatus.COMPLETED},
+    EventStatus.PUBLISHED: {EventStatus.CANCELLED, EventStatus.COMPLETED},
     EventStatus.CANCELLED: set(),
-    EventStatus.COMPLETED: set()
+    EventStatus.COMPLETED: set(),
 }
 
 class Event(BaseModel):
@@ -50,12 +50,12 @@ class Event(BaseModel):
     
     # ---- Computed properties ----
     @property
-    def seats_reamining(self) -> int:
+    def seats_remaining(self) -> int:
         return max(0, self.total_capacity - self.tickets_sold)
     
     @property
     def is_sold_out(self) -> bool:
-        return self.seats_reamining == 0
+        return self.seats_remaining == 0
     
     # ---- State machine ----
     def can_transition_to(self, new_status: str) -> bool:
@@ -80,8 +80,8 @@ class TicketTier(BaseModel):
         ordering = ["price"]
         indexes = [models.Index(fields=["event", "is_active"], name="tier_event_active_idx")]
         constraints = [
-            models.CheckConstraint(check=models.Q(price_gte=0),name="tier_price_non_negative"),
-            models.CheckConstraint(check=models.Q(quantity_gte=0),name="tier_quantity_positive"),
+            models.CheckConstraint(check=models.Q(price__gte=0), name="tier_price_non_negative"),
+            models.CheckConstraint(check=models.Q(quantity__gte=0), name="tier_quantity_positive"),
         ]
 
     def __str__(self) -> str:
@@ -94,12 +94,12 @@ class TicketTier(BaseModel):
 
     @property
     def is_available(self) -> bool:
-        from django.utils  import timezone
+        from django.utils import timezone
 
         if not self.is_active:
             return False
         now = timezone.now()
-        if self.sale_end and now < self.sale_start:
+        if self.sale_start and now < self.sale_start:
             return False
         if self.sale_end and now > self.sale_end:
             return False

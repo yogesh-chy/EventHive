@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from .serializers import EmailVerifySerializer, LoginSerializer, UserProfileSerializer, UserProfileUpdateSerializer, UserRegisterSerializer
+from .serializers import EmailVerifySerializer, LoginSerializer, UserProfileSerializer, UserProfileUpdateSerializer, UserRegisterSerializer, PasswordResetRequestSerializer, PasswordResetConfirmSerializer
 from core.permissions import IsVerifiedUser
 
 class RegisterView(APIView):
@@ -130,4 +130,42 @@ class UserMeView(APIView):
                 "data": UserProfileSerializer(request.user).data,
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class PasswordResetRequestView(APIView):
+    permission_classes = [AllowAny]
+    throttle_scope = "auth"
+
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {
+                "success": True,
+                "data": {
+                    "message": "If a matching account exists, a password reset link has been sent."
+                }
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = [AllowAny]
+    throttle_scope = "auth"
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {
+                "success": True,
+                "data": {
+                    "message": "Password has been reset successfully."
+                }
+            },
+            status=status.HTTP_200_OK
         )

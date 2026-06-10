@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
@@ -61,12 +62,10 @@ class User(AbstractBaseUser, PermissionsMixin):
         return self.role == self.Role.ORGANIZER
     
     @property
-    def is_attende(self) -> bool:
+    def is_attendee(self) -> bool:
         return self.role == self.Role.ATTENDEE
     
-class EmailVerificatonToken(models.Model):
-
-    import hashlib
+class EmailVerificationToken(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(User,on_delete=models.CASCADE, related_name="email_verification_token")
