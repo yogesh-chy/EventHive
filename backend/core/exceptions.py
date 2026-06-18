@@ -166,6 +166,20 @@ class SeatAlreadyReservedError(EventHiveAPIException):
     default_detail = "The requested seats are temporarily reserved by another session."
 
 
+class OrderExpiredError(EventHiveAPIException):
+    # Raised when a pending order's hold time has lapsed (Phase 3 — checkout flow).
+    status_code    = status.HTTP_410_GONE
+    default_code   = "order_expired"
+    default_detail = "This order has expired. Please start a new checkout."
+
+
+class OrderAlreadyConfirmedError(EventHiveAPIException):
+    # Raised when attempting to cancel an already-confirmed order (Phase 3).
+    status_code    = status.HTTP_409_CONFLICT
+    default_code   = "order_already_confirmed"
+    default_detail = "This order has already been confirmed and cannot be cancelled directly."
+
+
 class OrganizationAccessDeniedError(EventHiveAPIException):
     """Raised when a user attempts to access data outside their org scope."""
     status_code = status.HTTP_403_FORBIDDEN

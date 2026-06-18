@@ -249,3 +249,16 @@ class IsOrgOwnerOrAdmin(BasePermission):
         if getattr(user, "role", None) == ADMIN_ROLE:
             return True
         return obj.owner_id == user.id
+
+
+class IsOrderOwner(BasePermission):
+    # order.attendee_id must match request.user.pk. Admins bypass. (Phase 3)
+    message = "You do not have access to this order."
+
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj):
+        if getattr(request.user, "role", None) == ADMIN_ROLE:
+            return True
+        return obj.attendee_id == request.user.pk

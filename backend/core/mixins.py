@@ -180,3 +180,15 @@ class AuditLogMixin:
                 action,
                 instance,
             )
+
+
+# ── AttendeeOrderMixin ─────────────────────────────────────────────────────────
+
+class AttendeeOrderMixin:
+    # Scope order queryset to request.user. Admins see all. (Phase 3)
+
+    def apply_attendee_scope(self, queryset):
+        user = self.request.user
+        if getattr(user, "role", None) == ADMIN_ROLE:
+            return queryset
+        return queryset.filter(attendee=user)

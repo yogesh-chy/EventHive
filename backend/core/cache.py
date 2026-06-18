@@ -43,6 +43,8 @@ logger = logging.getLogger(__name__)
 EVENT_DETAIL_TTL = 300   # 5 minutes — per blueprint spec
 EVENT_LIST_TTL   = 120   # 2 minutes — short enough to self-heal
 EVENT_SEARCH_TTL = 120   # 2 minutes
+SEAT_LOCK_TTL    = 600   # 10 min — Phase 3
+ORDER_DETAIL_TTL = 60    # 1 min  — Phase 3
 
 
 # ── Key builders ──────────────────────────────────────────────────────────────
@@ -71,6 +73,35 @@ def event_search_key(query: str, page: str | int = 1) -> str:
 def org_detail_key(org_id: str) -> str:
     """eventhive:org:detail:<org_id>"""
     return f"eventhive:org:detail:{org_id}"
+
+
+# ── Phase 3 keys ──────────────────────────────────────────────────────────────
+
+def seat_lock_key(tier_id: str, user_id: str) -> str:
+    # eventhive:seat:lock:<tier_id>:<user_id>
+    return f"eventhive:seat:lock:{tier_id}:{user_id}"
+
+
+def order_detail_key(order_id: str) -> str:
+    # eventhive:order:detail:<order_id>
+    return f"eventhive:order:detail:{order_id}"
+
+
+def acquire_seat_lock(tier_id: str, user_id: str, quantity: int) -> bool:
+    # set(nx=True) — atomic; returns True if acquired, False if already held.
+    key      = seat_lock_key(str(tier_id), str(user_id))
+    acquired = cache.set(key, str(quantity), SEAT_LOCK_TTL, nx=True)
+    logger.debug("seat_lock acquire key=%s acquired=%s", key, acquired)
+    return bool(acquired)
+
+
+def release_seat_lock(tier_id: str, user_id: str) -> None:
+    cache.delete(seat_lock_key(str(tier_id), str(user_id)))
+
+
+def get_seat_lock_quantity(tier_id: str, user_id: str) -> int | None:
+    value = cache.get(seat_lock_key(str(tier_id), str(user_id)))
+    return int(value) if value is not None else None
 
 
 # ── Invalidation ──────────────────────────────────────────────────────────────
@@ -105,6 +136,11 @@ def invalidate_event_cache(slug: str) -> None:
 def invalidate_org_cache(org_id: str) -> None:
     """Bust org detail cache. Called after Org.save()."""
     cache.delete(org_detail_key(str(org_id)))
+
+
+def invalidate_order_cache(order_id: str) -> None:
+    # Bust order detail cache. Called from service on every status transition.
+    cache.delete(order_detail_key(str(order_id)))
 
 
 # Backward compatibility aliases for old names used in views/signals

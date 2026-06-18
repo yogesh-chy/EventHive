@@ -6,6 +6,7 @@ from django.utils import timezone
 from apps.organizations.models import Membership, Organization
 from apps.users.models import User
 from apps.events.models import Event, TicketTier
+from apps.orders.models import Order, OrderItem, Ticket, OrderStatus, TicketStatus
 
 fake = Faker()
 
@@ -103,3 +104,38 @@ class TicketTierFactory(DjangoModelFactory):
     quantity = 50
     quantity_sold = 0
     is_active = True
+
+
+class OrderFactory(DjangoModelFactory):
+    class Meta:
+        model = Order
+
+    attendee = factory.SubFactory(UserFactory)
+    event = factory.SubFactory(EventFactory)
+    status = OrderStatus.PENDING
+    total_amount = 20.00
+    currency = "USD"
+    expires_at = factory.LazyFunction(lambda: timezone.now() + timezone.timedelta(minutes=10))
+
+
+class OrderItemFactory(DjangoModelFactory):
+    class Meta:
+        model = OrderItem
+
+    order = factory.SubFactory(OrderFactory)
+    tier = factory.SubFactory(TicketTierFactory)
+    quantity = 1
+    unit_price = 20.00
+
+
+class TicketFactory(DjangoModelFactory):
+    class Meta:
+        model = Ticket
+
+    order_item = factory.SubFactory(OrderItemFactory)
+    attendee = factory.SubFactory(UserFactory)
+    event = factory.SubFactory(EventFactory)
+    tier = factory.SubFactory(TicketTierFactory)
+    status = TicketStatus.VALID
+    qr_code = factory.Sequence(lambda n: f"qrcode{n}")
+

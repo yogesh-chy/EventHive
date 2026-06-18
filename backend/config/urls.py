@@ -15,6 +15,8 @@ urlpatterns = [
     path('api/v1/orgs/', include('apps.organizations.urls')),
     # Events & Ticket Tiers
     path('api/v1/events/', include('apps.events.urls')),
+    # Orders & Tickets
+    path('api/v1/orders/', include('apps.orders.urls')),
 
     # API Schema
     path('api/v1/schema/', SpectacularAPIView.as_view(), name='schema'),

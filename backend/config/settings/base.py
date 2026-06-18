@@ -38,7 +38,7 @@ LOCAL_APPS = [
     "apps.events",
     "apps.audit",
     # Phase 3+
-    # "apps.orders",
+    "apps.orders",
     # "apps.tickets",
     # "apps.notifications",
 ]
