@@ -1,3 +1,27 @@
+"""
+apps/orders/serializers.py  ·  PHASE 3  (re-aligned to blueprint — Payments)
+
+CHANGES FROM PREVIOUS VERSION:
+  - reference exposed on OrderListSerializer / OrderDetailSerializer —
+    this is now the public identifier clients use in URLs.
+  - id (UUID) still included on OrderDetailSerializer for internal/admin
+    tooling, but reference is what the API contract documents.
+  - TicketSerializer now exposes attendee_name, attendee_email, pdf_url,
+    is_checked_in to match the blueprint's Ticket fields.
+  - confirmed_at / cancelled_at exposed on OrderDetailSerializer.
+
+PREDICTED PROBLEMS ADDRESSED:
+  1. Client building URLs from the UUID id instead of reference → id is
+     still present (admin/debugging use) but reference is listed first in
+     each Meta.fields tuple as a documentation signal of intended use.
+  2. Decimal precision loss → DecimalField everywhere, never FloatField.
+  3. Empty items list / duplicate tier_id → validate_items() as before.
+  4. client_secret accidentally included in this serializer and cached →
+     intentionally NOT a field here. views.py adds it to the response dict
+     directly, after serialization, so it can never end up in the Redis-
+     cached payload for GET /orders/{ref}/.
+"""
+
 from rest_framework import serializers
 
 from .models import Order, OrderItem, OrderStatus, Ticket, TicketStatus

@@ -1,3 +1,25 @@
+"""
+apps/orders/admin.py  ·  PHASE 3  (re-aligned to blueprint — Payments)
+
+CHANGES FROM PREVIOUS VERSION:
+  - list_display / search_fields use `reference` instead of the raw UUID.
+  - stripe_payment_intent_id, idempotency_key, confirmed_at, cancelled_at
+    added to readonly_fields — these must only ever be written by
+    services.py / payment.py, never edited by hand in the admin (editing
+    stripe_payment_intent_id directly could point an order at the wrong
+    PaymentIntent).
+  - Added a "Refund selected orders" action that calls services.refund_order()
+    for each row, so admin-initiated refunds go through the same Stripe +
+    inventory-restoration path as the API endpoint — never a raw status edit.
+
+PREDICTED PROBLEMS ADDRESSED:
+  1. Admin hand-editing stripe_payment_intent_id → read-only field.
+  2. Admin bulk status-editing bypassing the state machine → status field
+     stays read-only; refund/cancel actions go through services.py.
+  3. Admin hard-deleting orders → delete_selected removed; soft-delete only.
+  4. N+1 on order list → select_related + annotate(Count('items')).
+"""
+
 from django.contrib import admin
 from django.db.models import Count
 

@@ -112,6 +112,10 @@ class OrderFactory(DjangoModelFactory):
 
     attendee = factory.SubFactory(UserFactory)
     event = factory.SubFactory(EventFactory)
+    reference = factory.Sequence(lambda n: "".join(
+        "ABCDEFGHJKMNPQRSTUVWXYZ23456789"[(n + i) % 31] for i in range(8)
+    ))
+    idempotency_key = factory.Sequence(lambda n: f"idem{n:028d}")
     status = OrderStatus.PENDING
     total_amount = 20.00
     currency = "USD"

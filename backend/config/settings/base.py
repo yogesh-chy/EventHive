@@ -37,7 +37,6 @@ LOCAL_APPS = [
     "apps.organizations",
     "apps.events",
     "apps.audit",
-    # Phase 3+
     "apps.orders",
     # "apps.tickets",
     # "apps.notifications",
@@ -141,6 +140,19 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60
+
+CELERY_BEAT_SCHEDULE = {
+    "expire-pending-orders": {
+        "task":     "apps.orders.tasks.expire_pending_orders_task",
+        "schedule": 120,   # every 2 minutes
+    },
+}
+
+# ---- Stripe ----
+STRIPE_SECRET_KEY      = config("STRIPE_SECRET_KEY", default="")
+STRIPE_PUBLISHABLE_KEY = config("STRIPE_PUBLISHABLE_KEY", default="")
+STRIPE_WEBHOOK_SECRET   = config("STRIPE_WEBHOOK_SECRET", default="")
+
 
 
 # ---- Django REST Framework ----

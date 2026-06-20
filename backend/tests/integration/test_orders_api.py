@@ -1,5 +1,6 @@
 from datetime import timedelta
 from decimal import Decimal
+from unittest import mock
 
 import pytest
 from django.urls import reverse
@@ -42,7 +43,13 @@ def admin_client(api_client):
 
 @pytest.mark.django_db
 class TestOrdersAPI:
-    def test_create_order_success(self, attendee_client):
+    @mock.patch("apps.orders.payment.stripe.PaymentIntent.create")
+    def test_create_order_success(self, mock_create, attendee_client):
+        mock_intent = mock.MagicMock()
+        mock_intent.id = "pi_test_123"
+        mock_intent.client_secret = "seti_test_secret"
+        mock_create.return_value = mock_intent
+
         event = EventFactory(status="PUBLISHED", tickets_sold=4)
         tier = TicketTierFactory(
             event=event,
@@ -127,9 +134,9 @@ class TestOrdersAPI:
 
         assert response.status_code == status.HTTP_200_OK
         results = response.data["results"] if isinstance(response.data, dict) and "results" in response.data else response.data
-        ids = {item["id"] for item in results}
-        assert str(mine.id) in ids
-        assert str(other.id) not in ids
+        refs = {item["reference"] for item in results}
+        assert mine.reference in refs
+        assert other.reference not in refs
 
     def test_retrieve_order_returns_detail_for_owner(self, attendee_client):
         order = OrderFactory(attendee=attendee_client._user)
@@ -138,7 +145,7 @@ class TestOrdersAPI:
         TicketFactory(order_item=item, attendee=order.attendee, event=order.event, tier=tier)
         TicketFactory(order_item=item, attendee=order.attendee, event=order.event, tier=tier)
 
-        response = attendee_client.get(reverse("order-detail", kwargs={"id": order.id}))
+        response = attendee_client.get(reverse("order-detail", kwargs={"reference": order.reference}))
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data["id"] == str(order.id)
@@ -149,7 +156,7 @@ class TestOrdersAPI:
     def test_retrieve_order_hides_other_attendees_order(self, attendee_client):
         order = OrderFactory()
 
-        response = attendee_client.get(reverse("order-detail", kwargs={"id": order.id}))
+        response = attendee_client.get(reverse("order-detail", kwargs={"reference": order.reference}))
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -170,7 +177,7 @@ class TestOrdersAPI:
             status=TicketStatus.VALID,
         )
 
-        response = attendee_client.post(reverse("order-cancel", kwargs={"id": order.id}))
+        response = attendee_client.post(reverse("order-cancel", kwargs={"reference": order.reference}))
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data["status"] == OrderStatus.CANCELLED
@@ -190,7 +197,7 @@ class TestOrdersAPI:
         item = OrderItemFactory(order=order)
         TicketFactory(order_item=item, status=TicketStatus.USED)
 
-        response = attendee_client.post(reverse("order-cancel", kwargs={"id": order.id}))
+        response = attendee_client.post(reverse("order-cancel", kwargs={"reference": order.reference}))
 
         assert response.status_code == status.HTTP_409_CONFLICT
         assert "detail" in response.data
@@ -198,7 +205,7 @@ class TestOrdersAPI:
     def test_confirm_order_requires_admin(self, attendee_client):
         order = OrderFactory(attendee=attendee_client._user, status=OrderStatus.PENDING)
 
-        response = attendee_client.post(reverse("order-confirm", kwargs={"id": order.id}))
+        response = attendee_client.post(reverse("order-confirm", kwargs={"reference": order.reference}))
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -209,16 +216,16 @@ class TestOrdersAPI:
         )
 
         response = admin_client.post(
-            reverse("order-confirm", kwargs={"id": order.id}),
+            reverse("order-confirm", kwargs={"reference": order.reference}),
             {"payment_intent_id": "pi_test_123"},
             format="json",
         )
 
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["status"] == OrderStatus.CONFIRM
-        assert response.data["payment_intent_id"] == "pi_test_123"
+        assert response.data["status"] == OrderStatus.CONFIRMED
+        assert response.data["stripe_payment_intent_id"] == "pi_test_123"
 
         order.refresh_from_db()
-        assert order.status == OrderStatus.CONFIRM
-        assert order.payment_intent_id == "pi_test_123"
+        assert order.status == OrderStatus.CONFIRMED
+        assert order.stripe_payment_intent_id == "pi_test_123"
         assert order.expires_at is None

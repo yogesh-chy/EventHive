@@ -1,50 +1,13 @@
-"""
-core/permissions.py  ·  PHASE 2
-
-All custom DRF permission classes for EventHive.
-
-Role hierarchy (stored on User.role):
-  ADMIN      — platform staff; bypasses all org/object-level restrictions
-  ORGANIZER  — creates & manages events within their org(s)
-  ATTENDEE   — purchases tickets; no write access to events
-
-Predicted problems addressed:
-──────────────────────────────
-1.  AnonymousUser has no .role attribute → getattr(user, "role", None)
-    is used everywhere; AttributeError can never occur.
-
-2.  Organizer updating an event from a different org via a direct PATCH:
-    → IsEventOrganizer checks has_object_permission() against the event's
-      org FK, not just the user's role. Two-layer defence:
-        Layer 1: OrgScopedMixin scopes the queryset (event not found → 404)
-        Layer 2: IsEventOrganizer confirms org membership (→ 403)
-
-3.  Inactive org members retaining access:
-    → membership_set filter always includes org__is_active=True.
-
-4.  Magic role strings spread across codebase:
-    → Defined as module-level constants (ADMIN_ROLE, ORGANIZER_ROLE,
-      ATTENDEE_ROLE). Import these, never write the strings inline.
-
-5.  has_object_permission() never called if has_permission() returns False:
-    → DRF short-circuits correctly. Both methods are implemented on every
-      class that does object-level checks so behaviour is explicit.
-
-6.  Permission class __init__ not compatible with DRF's as_view():
-    → No custom __init__ on any permission class; DRF instantiates them.
-"""
-
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
-# ── Role constants ─────────────────────────────────────────────────────────────
+# ---- Role constants ----
 # Import these from here — never hardcode role strings in views/services.
 ADMIN_ROLE     = "ADMIN"
 ORGANIZER_ROLE = "ORGANIZER"
 ATTENDEE_ROLE  = "ATTENDEE"
 
 
-# ── Helper ─────────────────────────────────────────────────────────────────────
-
+# ---- Helper ---
 def _user_org_ids(user) -> set:
     """Return set of org PKs (as strings) the user has active membership in."""
     return {
@@ -55,8 +18,7 @@ def _user_org_ids(user) -> set:
     }
 
 
-# ── Platform-level permissions ─────────────────────────────────────────────────
-
+# ---- Platform-level permissions ----
 class IsAdminUser(BasePermission):
     """
     Grant access only to platform admins (role == ADMIN).
@@ -99,7 +61,7 @@ class IsAttendee(BasePermission):
         return bool(request.user and request.user.is_authenticated)
 
 
-# ── Object-level permissions ───────────────────────────────────────────────────
+# ── Object-level permissions ──
 
 class IsEventOrganizer(BasePermission):
     """
@@ -109,11 +71,6 @@ class IsEventOrganizer(BasePermission):
     Designed for EventViewSet with OrgScopedMixin.
     OrgScopedMixin scopes the queryset (non-member org → 404 before this fires).
     This class is the belt-and-suspenders 403 check.
-
-    Example:
-        def get_permissions(self):
-            if self.action in ("partial_update", "publish", "cancel"):
-                return [IsAuthenticated(), IsEventOrganizer()]
     """
     message = "You do not have organizer access to this event's organization."
 

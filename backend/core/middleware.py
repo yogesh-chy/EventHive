@@ -1,48 +1,3 @@
-"""
-core/middleware.py  ·  PHASE 1
-
-Two lightweight middleware classes:
-
-  1. RequestIDMiddleware
-     Injects a unique request ID into every request and response.
-     The ID is propagated through logs so a single request can be
-     traced across all log lines (including Celery tasks).
-
-  2. StructuredRequestLogMiddleware
-     Logs every request/response in a machine-parseable format
-     (JSON via structlog or plain key=value). Includes:
-     - method, path, status, duration_ms
-     - request_id (from RequestIDMiddleware)
-     - user_id (if authenticated)
-
-Predicted problems addressed:
-──────────────────────────────
-1.  Without a request ID, correlating a user-reported error to a
-    specific log line is guesswork. The ID is returned in the
-    X-Request-ID response header so clients can report it.
-
-2.  Middleware calling process_request after process_response in the
-    wrong order — MIDDLEWARE ordering in settings matters. Both classes
-    use the modern __call__ style (not the old process_* methods), which
-    is middleware-order-safe.
-
-3.  RequestID from client header accepted blindly — attacker could inject
-    a crafted ID. Header is validated: if it's not 8–64 safe characters
-    it's discarded and a new ID is generated.
-
-4.  Logging response bodies would leak PII — we log only method, path,
-    status, and duration. No request/response body ever logged.
-
-5.  500 errors logged at ERROR level; 4xx at WARNING; 2xx/3xx at INFO.
-
-Add to settings:
-    MIDDLEWARE = [
-        "core.middleware.RequestIDMiddleware",       # must be first
-        "core.middleware.StructuredRequestLogMiddleware",
-        ...
-    ]
-"""
-
 import logging
 import re
 import time
@@ -67,7 +22,7 @@ def get_current_request_id() -> str | None:
     return getattr(_local, "request_id", None)
 
 
-# ── RequestIDMiddleware ───────────────────────────────────────────────────────
+# ---- RequestIDMiddleware ----
 
 class RequestIDMiddleware:
     """
@@ -110,7 +65,7 @@ class RequestIDMiddleware:
         return uuid.uuid4().hex
 
 
-# ── StructuredRequestLogMiddleware ────────────────────────────────────────────
+# ---- StructuredRequestLogMiddleware ----
 
 class StructuredRequestLogMiddleware:
     """

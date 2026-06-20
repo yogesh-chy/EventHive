@@ -1,3 +1,53 @@
+"""
+apps/orders/services.py  ·  PHASE 3  (re-aligned to blueprint — Payments)
+
+All business logic for orders. Views stay thin; everything testable here.
+
+CHANGES FROM PREVIOUS VERSION:
+  - generate_order_reference()  NEW — collision-safe 8-char reference,
+    same retry pattern as events.services.generate_unique_slug() (Phase 2).
+  - create_order() now generates reference + idempotency_key. Does NOT call
+    Stripe — that happens in a separate step from the view, after this
+    transaction has committed (see payment.py docstring, problem #5).
+  - confirm_order() now sets confirmed_at.
+  - cancel_order()  now sets cancelled_at.
+  - refund_order()  NEW — Stripe refund + inventory restoration + audit.
+  - attach_payment_intent() NEW — records the Stripe PaymentIntent id on the
+    order after a successful payment.create_payment_intent() call.
+
+PREDICTED PROBLEMS ADDRESSED (full list, carried over + new):
+  1.  OVERSELLING under concurrency → select_for_update() inside
+      transaction.atomic(); second concurrent request blocks, re-reads the
+      decremented value, raises InsufficientInventoryError.
+  2.  PRICE DRIFT → unit_price snapshotted from tier.price AT ORDER CREATION.
+  3.  PARTIAL ORDER FAILURE → entire purchase inside ONE transaction.atomic();
+      any failure rolls back everything, including successfully-validated tiers.
+  4.  TOTAL MISMATCH (float arithmetic) → Decimal only, never float.
+  5.  DOUBLE SUBMIT → check_existing_pending_order() blocks a second PENDING
+      order for the same attendee+event.
+  6.  CANCEL RESTORING TOO MUCH INVENTORY → select_for_update() on the Order
+      row inside cancel_order(); re-checks status before restoring.
+  7.  TICKET QR CODE COLLISION → callable uuid4().hex default + DB unique.
+  8.  Event.tickets_sold DRIFT → F() updates in the same atomic transaction
+      as TicketTier.quantity_sold.
+  9.  CANCELLING A USED TICKET → refused if any ticket.status == USED.
+ 10.  EXPIRY RACE (Celery cancels while user confirms) → select_for_update()
+      re-read inside confirm_order() and cancel_order().
+ 11.  ORDER REFERENCE COLLISION → generate_order_reference() retries with a
+      fresh random reference; falls back to a longer suffix if exhausted.
+ 12.  STRIPE DOUBLE CHARGE on retried request → idempotency_key generated
+      once per order, reused on every Stripe call for that order.
+ 13.  REFUND CALLED ON A NON-CONFIRMED ORDER → refund_order() explicitly
+      requires status == CONFIRMED; PENDING orders should use cancel_order()
+      instead (no money has moved yet, so there's nothing to refund).
+ 14.  REFUND SUCCEEDS AT STRIPE BUT DB UPDATE FAILS (or vice versa) →
+      Stripe call happens FIRST, outside the DB transaction. Only after
+      Stripe confirms the refund do we open transaction.atomic() to update
+      local state. If the DB update fails, the refund still exists at
+      Stripe (recoverable via reconciliation); we never claim a refund
+      happened locally without Stripe confirming it first.
+"""
+
 import logging
 import secrets
 import string

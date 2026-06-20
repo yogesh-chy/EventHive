@@ -8,9 +8,15 @@ from .models import Order
 
 logger = logging.getLogger(__name__)
 
+
 @receiver(post_save, sender=Order, dispatch_uid="orders.invalidate_order_cache_on_save")
 def invalidate_cache_on_order_save(sender, instance: Order, **kwargs):
+    if not instance.reference:
+        return  # not yet assigned — nothing meaningful to invalidate
     try:
-        invalidate_order_cache(str(instance.id))
+        invalidate_order_cache(instance.reference)
     except Exception:
-        logger.exception("Failed to invalidate order cache. order_id=%s - expires at TTL.", instance.id)
+        logger.exception(
+            "Failed to invalidate order cache. ref=%s — expires at TTL.",
+            instance.reference,
+        )

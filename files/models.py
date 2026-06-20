@@ -1,3 +1,69 @@
+"""
+apps/orders/models.py  ·  PHASE 3  (re-aligned to blueprint — adds Payments fields)
+
+Models: Order, OrderItem, Ticket, ProcessedStripeEvent
+
+CHANGES FROM PREVIOUS VERSION (re-alignment to EventHive_Architecture.pdf):
+  - Order.reference        NEW  — 8-char unique slug, used in URLs (/orders/{ref}/)
+                                  instead of the UUID id, per blueprint API spec.
+  - Order.idempotency_key  NEW  — unique, generated at order creation. Passed to
+                                  Stripe as the idempotency header so retried
+                                  requests after a network failure never double-charge.
+  - Order.payment_intent_id renamed → stripe_payment_intent_id, now unique+nullable
+                                  (blueprint: "stripe_payment_intent_id (unique)").
+  - Order.confirmed_at,
+    Order.cancelled_at      NEW  — explicit timestamps per blueprint, instead of
+                                  relying on updated_at.
+  - Ticket.attendee_name,
+    Ticket.attendee_email   NEW  — denormalized snapshot captured at purchase
+                                  time. Per blueprint: tickets can be addressed
+                                  to someone other than the purchasing attendee
+                                  (e.g. buying for a friend); this field exists
+                                  for that, defaulting to the attendee's own info.
+  - Ticket.pdf_url          NEW  — S3 key for the generated PDF ticket (Phase 4
+                                  populates this; field exists now so the
+                                  migration doesn't need to run twice).
+  - Ticket.is_checked_in    NEW  — read-only property mirroring blueprint's
+                                  boolean field name. Backed by `status` rather
+                                  than a separate boolean column, because a
+                                  plain boolean cannot also represent
+                                  TicketStatus.CANCELLED — collapsing that
+                                  distinction would silently break cancel_order().
+  - ProcessedStripeEvent    NEW  — idempotent webhook processing per blueprint:
+                                  "Webhook handler first checks stripe_event_id
+                                  in processed_events table — skip if seen."
+
+DEVIATION FROM BLUEPRINT (documented, not silent):
+  Blueprint's Ticket has unique_together: (order, tier) with no quantity field
+  and no OrderItem model. Taken literally, that allows at most ONE ticket per
+  tier per order — i.e. nobody could buy 2 "General" tickets in a single
+  checkout. That breaks the core purchase flow the blueprint itself describes
+  ("Atomic Ticket Purchase" — tier availability checked per request, not
+  capped at 1). OrderItem is kept as the quantity-tracking layer between Order
+  and Ticket; Ticket continues to reference OrderItem rather than Order+Tier
+  directly. unique_together(order, tier) is intentionally NOT applied.
+
+PREDICTED PROBLEMS ADDRESSED (carried over + new):
+  1.  Overselling under concurrency → select_for_update() in services.py.
+  2.  Price drift → unit_price snapshotted on OrderItem at creation.
+  3.  Decimal-only arithmetic → no FloatField anywhere.
+  4.  Abandoned PENDING orders → expires_at + Celery expiry task.
+  5.  Double-submit → existing-pending-order check in services.py.
+  6.  Event.tickets_sold drift → F() updates in the same transaction.
+  7.  QR code collision → uuid4().hex callable default + DB unique constraint.
+  8.  Checked-in ticket cancelled → TicketStatus.USED blocks cancel.
+  9.  Deleting a User/Event with orders → on_delete=PROTECT.
+ 10.  STRIPE DOUBLE CHARGE on retry → idempotency_key passed to Stripe API
+      calls (see payment.py); duplicate webhook delivery → ProcessedStripeEvent
+      guard in webhook_views.py.
+ 11.  Order reference collision → generate_order_reference() in services.py
+      retries on collision, same pattern as Event slug generation in Phase 2.
+ 12.  stripe_payment_intent_id uniqueness with NULL values → field uses
+      null=True (not blank="" ) so multiple un-paid orders can coexist;
+      PostgreSQL treats multiple NULLs as distinct under a unique constraint,
+      but multiple empty strings would violate it.
+"""
+
 import uuid as _uuid
 
 from django.conf import settings
@@ -152,11 +218,6 @@ class OrderItem(BaseModel):
     @property
     def subtotal(self):
         return self.unit_price * self.quantity
-
-
-def generate_qr_code() -> str:
-    import uuid
-    return uuid.uuid4().hex
 
 
 # ── Ticket ─────────────────────────────────────────────────────────────────────

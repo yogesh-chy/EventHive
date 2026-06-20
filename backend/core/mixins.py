@@ -1,37 +1,3 @@
-"""
-core/mixins.py  ·  PHASE 2
-
-Reusable view mixins shared across all EventHive apps.
-
-  OrgScopedMixin  — Enforce multi-tenancy at the queryset level.
-  AuditLogMixin   — Write an AuditLog entry after state-changing requests.
-
-Predicted problems addressed:
-──────────────────────────────
-1.  Organiser accidentally sees another org's data if the filter is
-    applied inconsistently → OrgScopedMixin is applied at get_queryset()
-    level, not at individual view methods. One place to change, one
-    place to test.
-
-2.  Admin bypass must be explicit, not implicit:
-    → `if role == ADMIN: return queryset` at the top of apply_org_scope().
-      If the role check is accidentally removed, the restriction still
-      applies — it does not default to unrestricted.
-
-3.  Membership lookup firing per-request (N+1 across requests):
-    → org IDs are fetched once per request and stored in _cached_org_ids
-      on the view instance. Multiple calls to apply_org_scope() within
-      the same request reuse the cached list.
-
-4.  Org membership check missing `org__is_active=True`:
-    → Explicitly included so suspended orgs are excluded even if the
-      user's Membership row still exists.
-
-5.  AuditLog failure crashing a legitimate write request:
-    → _write_audit() is wrapped in try/except. Audit failure is logged
-      at ERROR level but never propagates to the caller.
-"""
-
 import logging
 from typing import Any
 
@@ -42,7 +8,7 @@ logger = logging.getLogger(__name__)
 ADMIN_ROLE = "ADMIN"
 
 
-# ── OrgScopedMixin ─────────────────────────────────────────────────────────────
+# ---- OrgScopedMixin ----
 
 class OrgScopedMixin:
     """
@@ -97,11 +63,6 @@ class OrgScopedMixin:
         return queryset.filter(org_id__in=org_ids)
 
     def assert_org_access(self, org_id: Any) -> None:
-        """
-        Raise PermissionDenied if the user doesn't belong to `org_id`.
-        Use this in create/update views where the org comes from the request
-        body rather than from the queryset.
-        """
         from rest_framework.exceptions import PermissionDenied
 
         user = self.request.user  # type: ignore[attr-defined]
@@ -129,25 +90,9 @@ class OrgScopedMixin:
             raise NotFound("Organization not found.")
 
 
-# ── AuditLogMixin ──────────────────────────────────────────────────────────────
+# ---- AuditLogMixin ----
 
 class AuditLogMixin:
-    """
-    Automatically write an AuditLog row after successful create/update operations.
-
-    Relies on apps.audit.services.write_audit_log() introduced in Phase 1.
-    Override `audit_action` at the ViewSet level:
-
-        class EventViewSet(AuditLogMixin, viewsets.GenericViewSet):
-            audit_action = "EVENT"
-
-    Writes:
-      - EVENT_CREATED on perform_create()
-      - EVENT_UPDATED on perform_update()
-
-    Custom actions (publish, cancel) should call self._write_audit() directly.
-    """
-
     audit_action: str = "OBJECT"
 
     def perform_create(self, serializer):
@@ -182,7 +127,7 @@ class AuditLogMixin:
             )
 
 
-# ── AttendeeOrderMixin ─────────────────────────────────────────────────────────
+# ---- AttendeeOrderMixin ----
 
 class AttendeeOrderMixin:
     # Scope order queryset to request.user. Admins see all. (Phase 3)

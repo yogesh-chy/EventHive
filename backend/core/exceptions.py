@@ -1,38 +1,3 @@
-"""
-core/exceptions.py  ·  PHASE 1
-
-Custom DRF exception handler and application-specific exception classes.
-
-Predicted problems addressed:
-──────────────────────────────
-1.  DRF's default error format is inconsistent:
-      400: {"field": ["message"]}   OR   {"detail": "message"}
-    Clients must handle two shapes. Our handler normalises ALL errors to:
-      {
-        "errors": [
-          {"code": "invalid", "detail": "Human message.", "attr": "field_name"},
-          ...
-        ]
-      }
-    This is a superset of RFC 7807 Problem Details and works with any client.
-
-2.  Unhandled Python exceptions (500s) leak stack traces. The handler
-    catches them in DEBUG=False mode, logs the traceback, and returns a
-    safe generic envelope.
-
-3.  ValidationError can contain nested dicts (serializer.errors) — the
-    handler recursively flattens them so no nested parsing is needed.
-
-4.  HTTP 404 and 403 from Django middleware are not DRF exceptions; they
-    arrive as plain Django responses. handler404 / handler403 are wired
-    in urls.py to produce the same JSON envelope.
-
-Wire up in settings:
-    REST_FRAMEWORK = {
-        "EXCEPTION_HANDLER": "core.exceptions.custom_exception_handler",
-    }
-"""
-
 import logging
 from typing import Any
 
@@ -47,8 +12,7 @@ from rest_framework.views import exception_handler as drf_default_handler
 logger = logging.getLogger(__name__)
 
 
-# ── Normalisation helpers ─────────────────────────────────────────────────────
-
+# ---- Normalisation helpers ----
 def _flatten_errors(detail: Any, attr: str | None = None) -> list[dict]:
     """
     Recursively flatten DRF's nested error structures into a flat list:
@@ -85,8 +49,7 @@ def _make_envelope(errors: list[dict]) -> dict:
     return {"success": False, "errors": errors}
 
 
-# ── Main handler ──────────────────────────────────────────────────────────────
-
+# ---- Main handler ----
 def custom_exception_handler(exc: Exception, context: dict) -> Response | None:
     """
     Drop-in replacement for DRF's default exception handler.
@@ -133,8 +96,7 @@ def custom_exception_handler(exc: Exception, context: dict) -> Response | None:
     return response
 
 
-# ── Custom application exceptions ─────────────────────────────────────────────
-
+# ---- Custom application exceptions ----
 class EventHiveAPIException(APIException):
     """
     Base class for all EventHive-specific exceptions.
@@ -178,6 +140,19 @@ class OrderAlreadyConfirmedError(EventHiveAPIException):
     status_code    = status.HTTP_409_CONFLICT
     default_code   = "order_already_confirmed"
     default_detail = "This order has already been confirmed and cannot be cancelled directly."
+
+
+class PaymentFailedError(EventHiveAPIException):
+    status_code    = status.HTTP_402_PAYMENT_REQUIRED
+    default_code   = "payment_failed"
+    default_detail = "Payment could not be processed. Please try again or use a different payment method."
+
+
+class RefundFailedError(EventHiveAPIException):
+    status_code    = status.HTTP_502_BAD_GATEWAY
+    default_code   = "refund_failed"
+    default_detail = "The refund could not be processed by the payment provider. Please try again or contact support."
+
 
 
 class OrganizationAccessDeniedError(EventHiveAPIException):

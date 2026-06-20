@@ -1,3 +1,39 @@
+"""
+apps/orders/views.py  ·  PHASE 3  (re-aligned to blueprint — Payments)
+
+CHANGES FROM PREVIOUS VERSION:
+  - lookup_field changed from "id" to "reference" — blueprint specifies
+    GET /api/v1/orders/{ref}/ and POST /api/v1/orders/{ref}/cancel/.
+  - create() now performs the full blueprint purchase flow:
+      1. services.create_order()             — DB transaction, no Stripe
+      2. payment.create_payment_intent()      — Stripe call, outside the DB transaction
+      3. services.attach_payment_intent()     — record the intent id
+      4. on Stripe failure: services.cancel_order() to roll back inventory,
+         return 402 Payment Required (matches blueprint: "On failure:
+         rollback DB transaction, release Redis lock, return 402.")
+    Response includes client_secret so the frontend can complete payment
+    via Stripe.js / Stripe Elements.
+  - Added refund action: POST /api/v1/orders/{ref}/refund/.
+  - confirm action kept for admin/manual testing; Stripe webhook
+    (webhook_views.py) is now the PRIMARY confirmation path in production.
+
+PREDICTED PROBLEMS ADDRESSED:
+  1. N+1 on list/detail → select_related + prefetch_related, as before.
+  2. Attendee seeing another user's orders → AttendeeOrderMixin scope.
+  3. Service/payment exceptions returning 500 → mapped to 409/402/502.
+  4. PARTIAL FAILURE BETWEEN DB COMMIT AND STRIPE CALL — if Stripe's
+     create_payment_intent() call fails (network error, card validation,
+     etc.) AFTER create_order() has already committed and decremented
+     inventory, the inventory must be restored. cancel_order() is called
+     in the except block specifically to undo this — the user sees a 402,
+     not a successful order that nobody charged for and that silently
+     consumed inventory forever.
+  5. CLIENT_SECRET LEAKING TO THE WRONG USER — client_secret is only
+     returned in the immediate create() response, never persisted into
+     the cached OrderDetailSerializer payload (cache stores model fields
+     only, not the ephemeral Stripe response).
+"""
+
 import logging
 
 from django.core.cache import cache

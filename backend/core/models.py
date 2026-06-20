@@ -1,41 +1,10 @@
-"""
-core/models.py  ·  PHASE 1
-
-Abstract base model inherited by every EventHive model.
-
-Design decisions & predicted problems addressed:
-─────────────────────────────────────────────────
-1.  UUID primary key — avoids sequential ID enumeration attacks
-    (e.g. GET /api/v1/events/1/ lets a caller scrape all events).
-    UUID is generated in Python (not the DB) so the PK is known
-    before the INSERT, which is required for nested object creation.
-
-2.  Soft-delete (is_deleted flag) — hard deletes lose audit history
-    and break foreign-key references in order/ticket records.
-    SoftDeleteManager is the default manager so filter(is_deleted=False)
-    is automatic. AllObjectsManager is available for admin/migrations.
-
-3.  Two timestamps (created_at / updated_at) — auto_now_add / auto_now
-    means they are always correct and never writable from user input.
-
-4.  created_by optional FK — nullable because some objects are created
-    by system processes (e.g. scheduled jobs) with no user context.
-    SET_NULL on delete so user deletion doesn't cascade to all their
-    created objects.
-
-5.  SoftDeleteManager does NOT override delete() on the queryset level
-    automatically — callers must use .soft_delete() to be explicit.
-    This prevents accidental soft-delete in unexpected code paths.
-"""
-
 import uuid
 
 from django.conf import settings
 from django.db import models
 
 
-# ── Managers ──────────────────────────────────────────────────────────────────
-
+# ---- Managers ----
 class SoftDeleteQuerySet(models.QuerySet):
     """QuerySet that adds a soft_delete() helper and filters out deleted rows."""
 
@@ -78,8 +47,7 @@ class AllObjectsManager(models.Manager):
         return SoftDeleteQuerySet(self.model, using=self._db)
 
 
-# ── Abstract base model ────────────────────────────────────────────────────────
-
+# ---- Abstract base model ----
 class BaseModel(models.Model):
     """
     Abstract model providing:
@@ -123,7 +91,7 @@ class BaseModel(models.Model):
         help_text="Soft-delete flag. Rows with is_deleted=True are hidden from default queries.",
     )
 
-    # ── Managers ──────────────────────────────────────────────────────────────
+    #  Managers 
     objects = SoftDeleteManager()       # default: hides deleted rows
     all_objects = AllObjectsManager()   # explicit: includes deleted rows
 
@@ -132,7 +100,7 @@ class BaseModel(models.Model):
         # Concrete subclasses inherit ordering=[] (no default ordering)
         # so they can declare their own without conflicts.
 
-    # ── Soft delete helpers ───────────────────────────────────────────────────
+    #  Soft delete helpers 
 
     def soft_delete(self, save: bool = True) -> None:
         """
@@ -149,7 +117,7 @@ class BaseModel(models.Model):
         if save:
             self.save(update_fields=["is_deleted", "updated_at"])
 
-    # ── Dunder helpers ────────────────────────────────────────────────────────
+    #  Dunder helpers 
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} id={self.id}>"

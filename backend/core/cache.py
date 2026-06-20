@@ -1,36 +1,3 @@
-"""
-core/cache.py  ·  PHASE 2
-
-Centralised cache helpers for EventHive.
-
-All cache keys are namespaced under "eventhive:<domain>:<type>:<id>" to:
-  - prevent collisions between apps sharing the same Redis instance
-  - allow targeted pattern-delete per domain (e.g. wipe all event caches)
-
-Predicted problems addressed:
-──────────────────────────────
-1.  delete_pattern() only exists on django-redis backends.
-    LocMemCache (used in unit tests) raises AttributeError.
-    → Wrapped in try/except; silently degrades to TTL-based expiry.
-
-2.  Cache key collisions between event detail keys and Phase 3
-    seat-lock keys → strict namespacing: "eventhive:event:*" vs
-    "eventhive:seat:*" — never overlap.
-
-3.  Cache stampede on popular events after TTL expiry (many concurrent
-    requests all miss and all rebuild the cache simultaneously).
-    → callers should use get_or_set() with a short lock (Phase 5).
-      For now, TTL is staggered: detail=5 min, list/search=2 min.
-
-4.  Stale list-cache entries after an event update:
-    → invalidate_event_cache() tries pattern-delete on list/* and
-      search/* keys; falls back to TTL on non-redis backends.
-
-5.  Cache key from unsorted query params (e.g. ?city=ktm&status=PUBLISHED
-    vs ?status=PUBLISHED&city=ktm should hit the same key):
-    → event_list_key() sorts the dict before hashing.
-"""
-
 import hashlib
 import json
 import logging
@@ -39,7 +6,7 @@ from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
-# ── TTLs (seconds) ────────────────────────────────────────────────────────────
+# ---- TTLs (seconds) ----
 EVENT_DETAIL_TTL = 300   # 5 minutes — per blueprint spec
 EVENT_LIST_TTL   = 120   # 2 minutes — short enough to self-heal
 EVENT_SEARCH_TTL = 120   # 2 minutes
@@ -47,7 +14,7 @@ SEAT_LOCK_TTL    = 600   # 10 min — Phase 3
 ORDER_DETAIL_TTL = 60    # 1 min  — Phase 3
 
 
-# ── Key builders ──────────────────────────────────────────────────────────────
+# ---- Key builders ----
 
 def event_detail_key(slug: str) -> str:
     """eventhive:event:detail:<slug>"""
@@ -75,7 +42,7 @@ def org_detail_key(org_id: str) -> str:
     return f"eventhive:org:detail:{org_id}"
 
 
-# ── Phase 3 keys ──────────────────────────────────────────────────────────────
+# ---- Phase 3 keys ----
 
 def seat_lock_key(tier_id: str, user_id: str) -> str:
     # eventhive:seat:lock:<tier_id>:<user_id>
@@ -88,9 +55,10 @@ def order_detail_key(order_id: str) -> str:
 
 
 def acquire_seat_lock(tier_id: str, user_id: str, quantity: int) -> bool:
-    # set(nx=True) — atomic; returns True if acquired, False if already held.
+    # cache.add() only writes if the key does not already exist.
+    # Redis backends implement this atomically with SET NX semantics.
     key      = seat_lock_key(str(tier_id), str(user_id))
-    acquired = cache.set(key, str(quantity), SEAT_LOCK_TTL, nx=True)
+    acquired = cache.add(key, str(quantity), SEAT_LOCK_TTL)
     logger.debug("seat_lock acquire key=%s acquired=%s", key, acquired)
     return bool(acquired)
 
@@ -104,8 +72,7 @@ def get_seat_lock_quantity(tier_id: str, user_id: str) -> int | None:
     return int(value) if value is not None else None
 
 
-# ── Invalidation ──────────────────────────────────────────────────────────────
-
+# ---- Invalidation ----
 def invalidate_event_cache(slug: str) -> None:
     """
     Bust caches for a specific event and all list/search pages.
