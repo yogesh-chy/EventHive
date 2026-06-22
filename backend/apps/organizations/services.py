@@ -11,7 +11,7 @@ class OrganizationService:
     def create_organization(owner: User, name: str, logo: str = "") -> Organization:
         try:
             org = Organization.objects.create(name=name.strip(), owner=owner, logo=logo)
-        except:
+        except IntegrityError:
             import uuid as _uuid
             safe_name = f"{name.strip()} {str(_uuid.uuid4())[:8]}"
             org = Organization.objects.create(name=safe_name, owner=owner, logo=logo)

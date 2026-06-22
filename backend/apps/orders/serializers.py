@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Order, OrderItem, OrderStatus, Ticket, TicketStatus
+from .models import Order, OrderItem, Ticket
 
 
 # ── Read serializers ───────────────────────────────────────────────────────────

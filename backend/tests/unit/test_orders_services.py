@@ -2,9 +2,8 @@ import pytest
 from datetime import timedelta
 from decimal import Decimal
 from django.utils import timezone
-from django.db.models import F
 
-from apps.orders.models import Order, OrderItem, OrderStatus, Ticket, TicketStatus
+from apps.orders.models import OrderStatus, Ticket, TicketStatus
 from apps.orders.services import (
     create_order,
     confirm_order,

@@ -1,10 +1,8 @@
 import logging
 
-from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.core.cache import cache
-from django.db.models import DecimalField, Min, OuterRef, Prefetch, Subquery
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
+from django.db.models import DecimalField, OuterRef, Prefetch, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action

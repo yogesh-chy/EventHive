@@ -117,8 +117,8 @@ class TestTicketTierAPI:
 
     def test_list_ticket_tiers(self, api_client):
         event = EventFactory(status=EventStatus.PUBLISHED)
-        tier1 = TicketTierFactory(event=event, price=10.00)
-        tier2 = TicketTierFactory(event=event, price=20.00)
+        TicketTierFactory(event=event, price=10.00)
+        TicketTierFactory(event=event, price=20.00)
 
         url = reverse("tier_list", kwargs={"event_slug": event.slug})
         response = api_client.get(url)

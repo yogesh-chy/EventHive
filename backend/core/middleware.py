@@ -1,15 +1,16 @@
 import logging
 import re
+import threading
 import time
 import uuid
 
-from django.utils.deprecation import MiddlewareMixin
+from django.conf import settings
+from django.db import connection
 
 logger = logging.getLogger(__name__)
 
 # Thread-local storage so the request ID is accessible from anywhere
 # in the call stack (e.g., Celery task spawned during the request).
-import threading
 _local = threading.local()
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -110,10 +111,6 @@ class StructuredRequestLogMiddleware:
 
         return response
 
-
-# Backward compatibility middlewares and audit helpers
-from django.conf import settings
-from django.db import connection
 
 _audit_context = threading.local()
 

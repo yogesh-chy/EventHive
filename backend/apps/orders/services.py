@@ -1,6 +1,5 @@
 import logging
 import secrets
-import string
 import uuid
 from datetime import timedelta
 from decimal import Decimal
@@ -10,6 +9,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from core.cache import (
+    acquire_seat_lock,
     invalidate_event_cache,
     invalidate_order_cache,
     release_seat_lock,
@@ -102,64 +102,69 @@ def create_order(*, attendee, event, items: list[CheckoutItem]) -> Order:
 
     tier_ids     = [item.tier_id for item in items]
     quantity_map = {item.tier_id: item.quantity for item in items}
+    acquired_locks = _acquire_order_seat_locks(attendee, items)
 
-    with transaction.atomic():
-        from apps.events.models import TicketTier
-        tiers = {
-            str(t.id): t
-            for t in TicketTier.objects.select_for_update().filter(
-                id__in=tier_ids, is_deleted=False,
-            )
-        }
-
-        _validate_tiers(tiers, tier_ids, quantity_map, event)
-
-        total_amount = Decimal("0.00")
-        for tier_id, qty in quantity_map.items():
-            total_amount += tiers[tier_id].price * qty
-
-        order = Order.objects.create(
-            attendee         = attendee,
-            event            = event,
-            reference        = generate_order_reference(),
-            status           = OrderStatus.PENDING,
-            total_amount     = total_amount,
-            currency         = getattr(getattr(event, "org", None), "currency", "USD"),
-            idempotency_key  = generate_idempotency_key(),
-            expires_at       = timezone.now() + timedelta(minutes=ORDER_EXPIRY_MINUTES),
-            created_by       = attendee,
-        )
-
-        total_ticket_count = 0
-        for tier_id, qty in quantity_map.items():
-            tier = tiers[tier_id]
-            item = OrderItem.objects.create(
-                order=order, tier=tier, quantity=qty, unit_price=tier.price,
-            )
-            Ticket.objects.bulk_create([
-                Ticket(
-                    order_item     = item,
-                    attendee       = attendee,
-                    event          = event,
-                    tier           = tier,
-                    status         = TicketStatus.VALID,
-                    qr_code        = uuid.uuid4().hex,
-                    attendee_name  = getattr(attendee, "full_name", "") or attendee.get_username(),
-                    attendee_email = getattr(attendee, "email", ""),
+    try:
+        with transaction.atomic():
+            from apps.events.models import TicketTier
+            tiers = {
+                str(t.id): t
+                for t in TicketTier.objects.select_for_update().filter(
+                    id__in=tier_ids, is_deleted=False,
                 )
-                for _ in range(qty)
-            ])
-            total_ticket_count += qty
+            }
 
-        for tier_id, qty in quantity_map.items():
-            TicketTier.objects.filter(id=tier_id).update(
-                quantity_sold=F("quantity_sold") + qty
+            _validate_tiers(tiers, tier_ids, quantity_map, event)
+
+            total_amount = Decimal("0.00")
+            for tier_id, qty in quantity_map.items():
+                total_amount += tiers[tier_id].price * qty
+
+            order = Order.objects.create(
+                attendee         = attendee,
+                event            = event,
+                reference        = generate_order_reference(),
+                status           = OrderStatus.PENDING,
+                total_amount     = total_amount,
+                currency         = getattr(getattr(event, "org", None), "currency", "USD"),
+                idempotency_key  = generate_idempotency_key(),
+                expires_at       = timezone.now() + timedelta(minutes=ORDER_EXPIRY_MINUTES),
+                created_by       = attendee,
             )
 
-        from apps.events.models import Event as EventModel
-        EventModel.objects.filter(id=event.id).update(
-            tickets_sold=F("tickets_sold") + total_ticket_count
-        )
+            total_ticket_count = 0
+            for tier_id, qty in quantity_map.items():
+                tier = tiers[tier_id]
+                item = OrderItem.objects.create(
+                    order=order, tier=tier, quantity=qty, unit_price=tier.price,
+                )
+                Ticket.objects.bulk_create([
+                    Ticket(
+                        order_item     = item,
+                        attendee       = attendee,
+                        event          = event,
+                        tier           = tier,
+                        status         = TicketStatus.VALID,
+                        qr_code        = uuid.uuid4().hex,
+                        attendee_name  = getattr(attendee, "full_name", "") or attendee.get_username(),
+                        attendee_email = getattr(attendee, "email", ""),
+                    )
+                    for _ in range(qty)
+                ])
+                total_ticket_count += qty
+
+            for tier_id, qty in quantity_map.items():
+                TicketTier.objects.filter(id=tier_id).update(
+                    quantity_sold=F("quantity_sold") + qty
+                )
+
+            from apps.events.models import Event as EventModel
+            EventModel.objects.filter(id=event.id).update(
+                tickets_sold=F("tickets_sold") + total_ticket_count
+            )
+    except Exception:
+        _release_checkout_seat_locks(attendee, acquired_locks)
+        raise
 
     invalidate_event_cache(event.slug)
     logger.info(
@@ -405,6 +410,24 @@ def expire_pending_orders() -> int:
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _acquire_order_seat_locks(attendee, items: list[CheckoutItem]) -> list[str]:
+    acquired: list[str] = []
+    for item in items:
+        if not acquire_seat_lock(item.tier_id, str(attendee.id), item.quantity):
+            _release_checkout_seat_locks(attendee, acquired)
+            raise SeatAlreadyReservedError(
+                "You already have a temporary hold for one of these ticket tiers. "
+                "Complete or cancel the pending checkout before trying again."
+            )
+        acquired.append(item.tier_id)
+    return acquired
+
+
+def _release_checkout_seat_locks(attendee, tier_ids: list[str]) -> None:
+    for tier_id in tier_ids:
+        release_seat_lock(str(tier_id), str(attendee.id))
+
 
 def _release_order_seat_locks(order: Order) -> None:
     try:

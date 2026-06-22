@@ -3,10 +3,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.organizations.models import Membership, Organization
+from apps.organizations.models import Membership
 from apps.organizations.serializers import InviteMemberSerializer, MembershipSerializer, OrgnaizationCreateSerializer, OrganizationSerializer, OrganizationUpdateSerializer
 from apps.organizations.services import OrganizationService
-from core.permissions import IsOrgOwnerOrAdmin, IsVerifiedUser
+from core.permissions import IsVerifiedUser
 
 class OrganizationListCreateView(APIView):
 

@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.organizations.models import Membership, Organization
+from apps.organizations.models import Membership
 from apps.users.models import User
 from tests.factories import (
     AdminFactory,
@@ -105,7 +105,7 @@ class TestRegister:
 class TestLogin:
 
     def test_verified_user_gets_tokens(self, api_client):
-        user = UserFactory(email="login@example.com", password="Testpass123!")
+        UserFactory(email="login@example.com", password="Testpass123!")
         url = reverse("auth-login")
         response = api_client.post(
             url, {"email": "login@example.com", "password": "Testpass123!"},

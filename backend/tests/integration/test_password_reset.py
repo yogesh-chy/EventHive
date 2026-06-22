@@ -7,7 +7,6 @@ from django.utils.encoding import force_bytes
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.users.models import User
 from tests.factories import UserFactory
 
 @pytest.fixture
@@ -18,7 +17,7 @@ def api_client():
 class TestPasswordReset:
 
     def test_password_reset_request_sends_email(self, api_client):
-        user = UserFactory(email="reset@example.com")
+        UserFactory(email="reset@example.com")
         url = reverse("auth-password-reset")
         payload = {"email": "reset@example.com"}
 

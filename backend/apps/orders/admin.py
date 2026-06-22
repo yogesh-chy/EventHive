@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.db.models import Count
 
 from . import services
-from .models import Order, OrderItem, OrderStatus, Ticket, TicketStatus
+from .models import Order, OrderItem, OrderStatus, Ticket
 
 
 class OrderItemInline(admin.TabularInline):

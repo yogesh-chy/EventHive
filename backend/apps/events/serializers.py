@@ -1,7 +1,7 @@
 from decimal import Decimal
 from rest_framework import serializers
 
-from apps.events.models import Event, EventStatus, TicketTier
+from apps.events.models import Event, TicketTier
 
 
 # ---- TicketTier ----
@@ -88,7 +88,7 @@ class EventUpdateSerializer(serializers.ModelSerializer):
         if instance and value < instance.tickets_sold:
             raise serializers.ValidationError(
                 f"Cannot set total_capacity to {value};"
-                f"{instance.ticket_sold} tickets are already sold."
+                f"{instance.tickets_sold} tickets are already sold."
             )
         return value
 
