@@ -1,0 +1,17 @@
+Hi {{ attendee_name }},
+
+Your ticket for {{ event.title }} is confirmed.
+
+  Event:        {{ event.title }}
+  When:         {{ event.start_datetime }}
+  Venue:        {{ event.venue }}
+  Order ref:    {{ order.reference }}
+
+Download your ticket (PDF, link valid for 3 days):
+{{ pdf_url }}
+
+If the link expires before you've downloaded it, log in to your EventHive
+account and re-request it from your order page.
+
+See you there!
+EventHive

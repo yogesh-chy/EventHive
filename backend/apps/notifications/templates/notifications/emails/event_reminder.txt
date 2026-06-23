@@ -1,0 +1,13 @@
+Hi {{ attendee_name }},
+
+Just a reminder -- {{ event.title }} is happening tomorrow.
+
+  Event:   {{ event.title }}
+  Starts:  {{ event.start_datetime }}
+  Venue:   {{ event.venue }}
+
+Have your ticket QR code ready (in your confirmation email) for fast
+check-in at the door.
+
+See you soon!
+EventHive

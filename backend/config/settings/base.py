@@ -146,14 +146,47 @@ CELERY_BEAT_SCHEDULE = {
         "task":     "apps.orders.tasks.expire_pending_orders_task",
         "schedule": 120,   # every 2 minutes
     },
+    "dispatch-event-reminders": {
+        "task":     "tasks.notifications.dispatch_event_reminders_task",
+        "schedule": 900,   # every 15 minutes
+    },
+    "dispatch-abandoned-cart-emails": {
+        "task":     "tasks.notifications.dispatch_abandoned_cart_emails_task",
+        "schedule": 120,   # every 2 minutes -- same cadence as expiry, see services.py
+    },
 }
+
+CELERY_TASK_DEFAULT_QUEUE = "default"
+CELERY_TASK_ROUTES = {
+    "tasks.tickets.generate_ticket_assets_task": {"queue": "assets"},
+    "tasks.notifications.send_ticket_confirmation_email_task": {"queue": "emails"},
+    "tasks.notifications.send_event_reminder_email_task": {"queue": "emails"},
+    "tasks.notifications.send_abandoned_cart_email_task": {"queue": "emails"},
+    # Beat dispatcher tasks and apps.orders.tasks.expire_pending_orders_task
+    # stay on "default" -- they're lightweight queries that just fan out,
+    # not the actual heavy work.
+}
+
+CELERY_IMPORTS = (
+    "tasks.tickets",
+    "tasks.notifications",
+)
 
 # ---- Stripe ----
 STRIPE_SECRET_KEY      = config("STRIPE_SECRET_KEY", default="")
 STRIPE_PUBLISHABLE_KEY = config("STRIPE_PUBLISHABLE_KEY", default="")
 STRIPE_WEBHOOK_SECRET   = config("STRIPE_WEBHOOK_SECRET", default="")
 
+# ---- AWS ----
+AWS_ACCESS_KEY_ID       = config("AWS_ACCESS_KEY_ID", default="")
+AWS_SECRET_ACCESS_KEY   = config("AWS_SECRET_ACCESS_KEY", default="")
+AWS_STORAGE_BUCKET_NAME = config("AWS_STORAGE_BUCKET_NAME", default="eventhive-assets")
+AWS_S3_REGION_NAME      = config("AWS_S3_REGION_NAME", default="auto")
+AWS_S3_ENDPOINT_URL     = config("AWS_S3_ENDPOINT_URL", default="") or None
 
+# ---- Notifications timing ----
+TICKET_PDF_LINK_TTL_SECONDS = config("TICKET_PDF_LINK_TTL_SECONDS", default=259200, cast=int)
+ABANDONED_CART_AFTER_MINUTES = config("ABANDONED_CART_AFTER_MINUTES", default=6, cast=int)
 
 # ---- Django REST Framework ----
 REST_FRAMEWORK = {
@@ -187,7 +220,6 @@ REST_FRAMEWORK = {
 }
 
 # ---- JWT Settings ----
-
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),

@@ -1,0 +1,12 @@
+Hi,
+
+We noticed you started an order for {{ event.title }} but didn't finish
+checking out.
+
+  Event:   {{ event.title }}
+  Starts:  {{ event.start_datetime }}
+
+Your tickets are being held for a short while longer -- complete your
+purchase before they're released back into general availability.
+
+EventHive

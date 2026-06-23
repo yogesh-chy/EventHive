@@ -19,6 +19,24 @@ class TicketSerializer(serializers.ModelSerializer):
             "checked_in_at", "created_at",
         ]
         read_only_fields = fields
+    
+    def get_pdf_url(self, obj):
+        """
+        Phase 4: Ticket.pdf_url stores an S3/R2 *object key* (per its own
+        field docstring), not a usable URL -- serializing it as-is would
+        hand the API consumer an internal storage path instead of a working
+        link, and would leak that path even though it's not meant to be
+        public. This generates a fresh, time-limited presigned URL on every
+        read instead. Returns None until the async asset-generation task
+        (tasks.tickets.generate_ticket_assets_task) has completed.
+        """
+        if not obj.pdf_url:
+            return None
+        from django.conf import settings
+
+        from services.storage import generate_presigned_url
+
+        return generate_presigned_url(key=obj.pdf_url, expires_in=settings.TICKET_PDF_LINK_TTL_SECONDS)
 
 
 class OrderItemSerializer(serializers.ModelSerializer):

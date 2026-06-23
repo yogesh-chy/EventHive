@@ -18,16 +18,3 @@ app.autodiscover_tasks()
 @app.task(bind=True, ignore_result=True)
 def debug_task(self):
     print(f'Request: {self.request!r}')
-
-CELERY_BROKER_URL      = "redis://redis:6379/1"
-CELERY_RESULT_BACKEND  = "redis://redis:6379/1"
-CELERY_ACCEPT_CONTENT  = ["json"]
-CELERY_TASK_SERIALIZER = "json"
-CELERY_TIMEZONE        = "UTC"
- 
-CELERY_BEAT_SCHEDULE = {
-    "expire-pending-orders": {
-        "task":     "apps.orders.tasks.expire_pending_orders_task",
-        "schedule": 120,   # every 2 minutes
-    },
-}
