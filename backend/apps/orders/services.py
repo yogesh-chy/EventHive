@@ -253,6 +253,14 @@ def confirm_order(*, order: Order, payment_intent_id: str = "") -> Order:
             "status", "confirmed_at", "expires_at", "stripe_payment_intent_id", "updated_at",
         ])
 
+        def dispatch_tasks():
+            from tasks.tickets import generate_ticket_assets_task
+            tickets = Ticket.objects.filter(order_item__order=locked)
+            for ticket in tickets:
+                generate_ticket_assets_task.delay(str(ticket.id))
+        
+        transaction.on_commit(dispatch_tasks)
+
     _release_order_seat_locks(order)
     invalidate_order_cache(order.reference)
     logger.info("Order confirmed: ref=%s payment_intent=%s", order.reference, payment_intent_id)

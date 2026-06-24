@@ -23,8 +23,9 @@ def get_s3_client():
                 # else in this module needs to change either way
                 endpoint_url=getattr(settings, "AWS_S3_ENDPOINT_URL", None),
                 aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
                 region_name=getattr(settings, "AWS_S3_REGION_NAME", "auto"),
-                config=Config(signature_versions="s3v4")
+                config=Config(signature_version="s3v4")
             )
         return _client
 
@@ -48,10 +49,10 @@ def upload_bytes(*, key: str, data: bytes, content_type: str = "application/pdf"
     client = get_s3_client()
     client.put_object(
         Bucket=settings.AWS_STORAGE_BUCKET_NAME,
-        key=key,
+        Key=key,
         Body=data,
         ContentType=content_type,
-        ServerSideEncryption="ASE256"
+        ServerSideEncryption="AES256"
     )
 
 def generate_presigned_url(*, key: str, expires_in: int = 3600) -> str:
@@ -59,7 +60,7 @@ def generate_presigned_url(*, key: str, expires_in: int = 3600) -> str:
         return ""
     client = get_s3_client()
     return client.generate_presigned_url(
-        "get-object",
-        Params={"Bucket": settings.AWS_STORAGE_BUCKET_NAME, "key": key},
+        "get_object",
+        Params={"Bucket": settings.AWS_STORAGE_BUCKET_NAME, "Key": key},
         ExpiresIn=expires_in
     )

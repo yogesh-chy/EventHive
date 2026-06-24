@@ -10,7 +10,7 @@ def generate_qr_png_bytes(qr_payload: str) -> bytes:
     qr = qrcode.QRCode(version=None,error_correction=qrcode.constants.ERROR_CORRECT_M,box_size=10,border=4)
     qr.add_data(qr_payload)
     qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_colors="white")
+    img = qr.make_image(fill_color="black", back_color="white")
 
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
@@ -28,7 +28,7 @@ def render_ticket_pdf(*,qr_payload: str, event_title: str,event_starts_at, venue
     pdf.setFont("Helvetica-Bold", 14)
     pdf.drawString(margin, height - 15 * mm, (event_title or "")[:40])
 
-    pdf.setFont("Helvectica", 9)
+    pdf.setFont("Helvetica", 9)
     pdf.drawString(margin, height - 21 * mm, (venue or "")[:50])
     pdf.drawString(margin, height - 26 * mm, event_starts_at.strftime("%a, %d %b %Y - %H:%M %Z"))
 

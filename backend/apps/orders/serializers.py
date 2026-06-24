@@ -9,6 +9,7 @@ class TicketSerializer(serializers.ModelSerializer):
     tier_name     = serializers.CharField(source="tier.name",  read_only=True)
     event_name    = serializers.CharField(source="event.title", read_only=True)
     is_checked_in = serializers.BooleanField(read_only=True)
+    pdf_url       = serializers.SerializerMethodField()
 
     class Meta:
         model  = Ticket

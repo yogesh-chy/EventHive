@@ -23,7 +23,9 @@ class NotificationLog(models.Model):
     recipient_email = models.EmailField()
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
     attempts = models.PositiveSmallIntegerField(default=0)
-    last_error = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -41,7 +43,7 @@ class NotificationLog(models.Model):
         ]
     
     def __str__(self):
-        return f"{self.notification_type}:{self.target_type}:{self.target_type} [{self.status}]"
+        return f"{self.notification_type}:{self.target_type}:{self.target_id} [{self.status}]"
     
     @classmethod
     def claim(cls, *, notification_type, target_type, target_id, recipient_email):

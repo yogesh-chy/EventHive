@@ -48,6 +48,7 @@ class AdminFactory(UserFactory):
 class OrganizationFactory(DjangoModelFactory):
     class Meta:
         model = Organization
+        skip_postgeneration_save = True
 
     name = factory.LazyFunction(lambda: fake.company()[:100])
     owner = factory.SubFactory(OrganizerFactory)

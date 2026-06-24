@@ -194,7 +194,7 @@ class Ticket(BaseModel):
     qr_code = models.CharField(
         max_length=64,
         unique=True,
-        default=lambda: _uuid.uuid4().hex,
+        default=generate_qr_code,
         help_text="Unique token for QR code generation. UUIDv4 hex.",
     )
     pdf_url = models.CharField(
