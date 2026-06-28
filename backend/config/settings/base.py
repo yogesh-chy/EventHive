@@ -29,6 +29,7 @@ THIRD_PARTY_APPS = [
     "corsheaders",
     "django_filters",
     "drf_spectacular",
+    "channels"
 ]
 
 LOCAL_APPS = [
@@ -131,6 +132,23 @@ CACHES = {
     }
 }
 
+# ---- Channels (Phase 5: real-time seat-count broadcasting) ----
+# A dedicated Redis DB (2) rather than reusing REDIS_URL's db 0 -- that
+# same db 0 is already shared by the cache AND Celery's broker (both
+# default to REDIS_URL above with no db override). channels_redis adds
+# its own pub/sub + group-bookkeeping keys on top; giving it a separate
+# logical DB keeps `redis-cli -n 2 FLUSHDB` safe during development
+# without touching cache or broker state, and avoids any future key
+# collision as all three grow.
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [config("CHANNEL_LAYERS_REDIS_URL", default=REDIS_URL.rsplit("/", 1)[0] + "/2")],
+        },
+    },
+}
+
 # ---- Celery ----
 CELERY_BROKER_URL = config("CELERY_BROKER_URL", default=REDIS_URL)
 CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND", default=REDIS_URL)
@@ -140,6 +158,11 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60
+
+CELERY_TASK_ACKS_LATE = config("CELERY_TASK_ACKS_LATE", default=True, cast=bool)
+CELERY_WORKER_PREFETCH_MULTIPLIER = config("CELERY_WORKER_PREFETCH_MULTIPLIER", default=1, cast=int)
+CELERY_TASK_ALWAYS_EAGER = config("CELERY_TASK_ALWAYS_EAGER", default=False, cast=bool)
+CELERY_TASK_EAGER_PROPAGATES = config("CELERY_TASK_EAGER_PROPAGATES", default=True, cast=bool)
 
 CELERY_BEAT_SCHEDULE = {
     "expire-pending-orders": {
@@ -212,6 +235,8 @@ REST_FRAMEWORK = {
         "anon": "60/minute",
         "user": "300/minute",
         "auth": "10/minute",
+        "ticket_purchase": "10/minute",
+        "password_reset_email": "5/hour",
     },
     "DEFAULT_PAGINATION_CLASS": "core.pagination.EventCursorPagination",
     "PAGE_SIZE": 20,

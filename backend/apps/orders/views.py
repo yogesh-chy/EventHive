@@ -79,6 +79,13 @@ class OrderViewSet(AttendeeOrderMixin, viewsets.GenericViewSet):
         qs = _detail_qs() if self.action == "retrieve" else _base_qs()
         return self.apply_attendee_scope(qs)
 
+    def get_throttles(self):
+        throttles = super().get_throttles()
+        if self.action == "create":
+            from core.throttles import TicketPurchaseThrottle
+            throttles.append(TicketPurchaseThrottle())
+        return throttles
+
     # ── POST /api/v1/orders/ ───────────────────────────────────────────────────
 
     def create(self, request):

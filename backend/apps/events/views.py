@@ -13,6 +13,7 @@ from core.cache import EVENT_DETAIL_TTL, EVENT_LIST_TTL, event_detail_keys, even
 from core.pagination import EventCursorPagination
 from core.mixins import AuditLogMixin, OrgScopedMixin
 from core.permissions import IsOrganizer, IsEventOrganizer
+from services.search import search_events
 
 from . import services
 from .filters import EventFilter
@@ -45,7 +46,6 @@ def _base_event_queryset():
 
 
 # ---- EventViewSet ----
-
 class EventViewSet(OrgScopedMixin, AuditLogMixin, viewsets.GenericViewSet):
     lookup_field = "slug"
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -146,13 +146,10 @@ class EventViewSet(OrgScopedMixin, AuditLogMixin, viewsets.GenericViewSet):
         if cached is not None:
             return Response(cached)
         
-        search_query = SearchQuery(query_str, config="english")
-        queryset = (
-            _base_event_queryset()
-            .filter(status=EventStatus.PUBLISHED, search_vector=search_query)
-            .annotate(rank=SearchRank("search_vector", search_query))
-            .order_by("-rank")
-        )
+        # Phase 5: services/search.py owns the ranking strategy (full-text
+        # SearchRank, with a trigram-similarity fallback for typos) -- this
+        # view only handles caching, pagination, and serialization.
+        queryset = search_events(query_str=query_str, queryset=_base_event_queryset())
 
         page = self.paginate_queryset(queryset)
 
@@ -245,7 +242,6 @@ class EventViewSet(OrgScopedMixin, AuditLogMixin, viewsets.GenericViewSet):
 
 
 # ---- TicketTierViewSet ----
-
 class TicketTierViewSet(viewsets.GenericViewSet):
     serializer_class = TicketTierSerializer
     lookup_field = "id"

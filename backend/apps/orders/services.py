@@ -33,8 +33,7 @@ MAX_REFERENCE_RETRIES = 50
 _REFERENCE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 
-# ── DTO ────────────────────────────────────────────────────────────────────────
-
+# ---- DTO ----
 class CheckoutItem:
     __slots__ = ("tier_id", "quantity")
 
@@ -43,8 +42,7 @@ class CheckoutItem:
         self.quantity = int(quantity)
 
 
-# ── Reference generation ───────────────────────────────────────────────────────
-
+# ---- Reference generation ---- 
 def generate_order_reference() -> str:
     """
     Generate a collision-safe 8-character public order reference.
@@ -68,8 +66,7 @@ def generate_idempotency_key() -> str:
     return uuid.uuid4().hex
 
 
-# ── Pre-conditions ─────────────────────────────────────────────────────────────
-
+# ---- Pre-conditions ---
 def check_existing_pending_order(attendee, event) -> None:
     existing = Order.objects.filter(
         attendee=attendee, event=event,
@@ -85,8 +82,7 @@ def check_existing_pending_order(attendee, event) -> None:
         )
 
 
-# ── Create order ───────────────────────────────────────────────────────────────
-
+# ---- Create order ----
 def create_order(*, attendee, event, items: list[CheckoutItem]) -> Order:
     """
     Atomically create a PENDING order with inventory decremented.
@@ -102,6 +98,7 @@ def create_order(*, attendee, event, items: list[CheckoutItem]) -> Order:
 
     tier_ids     = [item.tier_id for item in items]
     quantity_map = {item.tier_id: item.quantity for item in items}
+
     acquired_locks = _acquire_order_seat_locks(attendee, items)
 
     try:
@@ -121,16 +118,16 @@ def create_order(*, attendee, event, items: list[CheckoutItem]) -> Order:
                 total_amount += tiers[tier_id].price * qty
 
             order = Order.objects.create(
-                attendee         = attendee,
-                event            = event,
-                reference        = generate_order_reference(),
-                status           = OrderStatus.PENDING,
-                total_amount     = total_amount,
-                currency         = getattr(getattr(event, "org", None), "currency", "USD"),
-                idempotency_key  = generate_idempotency_key(),
-                expires_at       = timezone.now() + timedelta(minutes=ORDER_EXPIRY_MINUTES),
-                created_by       = attendee,
-            )
+                attendee=attendee,
+                event=event,
+                reference=generate_order_reference(),
+                status=OrderStatus.PENDING,
+                total_amount=total_amount,
+                currency=getattr(getattr(event, "org", None), "currency", "USD"),
+                idempotency_key=generate_idempotency_key(),
+                expires_at=timezone.now() + timedelta(minutes=ORDER_EXPIRY_MINUTES),
+                created_by=attendee,
+                )
 
             total_ticket_count = 0
             for tier_id, qty in quantity_map.items():
@@ -151,7 +148,7 @@ def create_order(*, attendee, event, items: list[CheckoutItem]) -> Order:
                     )
                     for _ in range(qty)
                 ])
-                total_ticket_count += qty
+                total_ticket_count += qty    
 
             for tier_id, qty in quantity_map.items():
                 TicketTier.objects.filter(id=tier_id).update(
@@ -167,6 +164,7 @@ def create_order(*, attendee, event, items: list[CheckoutItem]) -> Order:
         raise
 
     invalidate_event_cache(event.slug)
+    _broadcast_seat_update(event_id=event.id, event_slug=event.slug)
     logger.info(
         "Order created: ref=%s attendee=%s event=%s total=%s",
         order.reference, attendee.pk, event.slug, total_amount,
@@ -209,8 +207,7 @@ def _validate_tiers(tiers, tier_ids, quantity_map, event) -> None:
         raise InsufficientInventoryError(" | ".join(errors))
 
 
-# ── Attach payment intent ──────────────────────────────────────────────────────
-
+# ---- Attach payment intent ----
 def attach_payment_intent(*, order: Order, stripe_payment_intent_id: str) -> Order:
     """
     Record the Stripe PaymentIntent id on the order after the view layer has
@@ -222,8 +219,7 @@ def attach_payment_intent(*, order: Order, stripe_payment_intent_id: str) -> Ord
     return order
 
 
-# ── Confirm order ──────────────────────────────────────────────────────────────
-
+# ---- Confirm order ----
 def confirm_order(*, order: Order, payment_intent_id: str = "") -> Order:
     """
     Transition PENDING → CONFIRMED. Called by the Stripe webhook handler on
@@ -267,8 +263,7 @@ def confirm_order(*, order: Order, payment_intent_id: str = "") -> Order:
     return locked
 
 
-# ── Cancel order ───────────────────────────────────────────────────────────────
-
+# ---- Cancel order ----
 def cancel_order(*, order: Order, actor) -> Order:
     """
     Cancel a PENDING or CONFIRMED order and restore inventory atomically.
@@ -325,12 +320,12 @@ def cancel_order(*, order: Order, actor) -> Order:
     _release_order_seat_locks(order)
     invalidate_event_cache(order.event.slug)
     invalidate_order_cache(order.reference)
+    _broadcast_seat_update(event_id=order.event_id, event_slug=order.event.slug)
     logger.info("Order cancelled: ref=%s actor=%s", order.reference, getattr(actor, "pk", actor))
     return locked
 
 
-# ── Refund order ───────────────────────────────────────────────────────────────
-
+# ---- Refund order ----
 def refund_order(*, order: Order, actor) -> Order:
     """
     Refund a CONFIRMED order: Stripe refund first, then local state update.
@@ -393,12 +388,12 @@ def refund_order(*, order: Order, actor) -> Order:
 
     invalidate_event_cache(order.event.slug)
     invalidate_order_cache(order.reference)
+    _broadcast_seat_update(event_id=order.event_id, event_slug=order.event.slug)
     logger.info("Order refunded: ref=%s actor=%s", order.reference, getattr(actor, "pk", actor))
     return locked
 
 
-# ── Expire stale pending orders ────────────────────────────────────────────────
-
+# --- Expire stale pending orders ----
 def expire_pending_orders() -> int:
     """Cancel PENDING orders past expires_at. Called every 2 min by Celery Beat."""
     expired = Order.objects.select_for_update(skip_locked=True).filter(
@@ -417,7 +412,33 @@ def expire_pending_orders() -> int:
     return count
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+# ---- Helpers ----
+def _broadcast_seat_update(*, event_id, event_slug: str) -> None:
+    from apps.events.models import Event as EventModel
+    from services.realtime import broadcast_seat_update
+
+    event = EventModel.objects.filter(id=event_id).only("id", "total_capacity", "tickets_sold").first()
+    if event is None:
+        return
+    broadcast_seat_update(event_slug, event.seats_remaining)
+
+
+def _dispatch_ticket_asset_generation(order: Order) -> None:
+    from tasks.tickets import generate_ticket_assets_task
+
+    ticket_ids = list(Ticket.objects.filter(order_item__order=order).values_list("id", flat=True))
+
+    for ticket_id in ticket_ids:
+        transaction.on_commit(lambda tid=ticket_id: generate_ticket_assets_task.delay(str(tid)))
+
+
+def _release_order_seat_locks(order: Order) -> None:
+    try:
+        for item in order.items.all():
+            release_seat_lock(str(item.tier_id), str(order.attendee_id))
+    except Exception:
+        logger.exception("Failed to release seat locks for order ref=%s", order.reference)
+
 
 def _acquire_order_seat_locks(attendee, items: list[CheckoutItem]) -> list[str]:
     acquired: list[str] = []
@@ -436,10 +457,3 @@ def _release_checkout_seat_locks(attendee, tier_ids: list[str]) -> None:
     for tier_id in tier_ids:
         release_seat_lock(str(tier_id), str(attendee.id))
 
-
-def _release_order_seat_locks(order: Order) -> None:
-    try:
-        for item in order.items.all():
-            release_seat_lock(str(item.tier_id), str(order.attendee_id))
-    except Exception:
-        logger.exception("Failed to release seat locks for order ref=%s", order.reference)

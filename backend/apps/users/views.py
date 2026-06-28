@@ -137,6 +137,12 @@ class PasswordResetRequestView(APIView):
     permission_classes = [AllowAny]
     throttle_scope = "auth"
 
+    def get_throttles(self):
+        throttles = super().get_throttles()
+        from core.throttles import PasswordResetEmailThrottle
+        throttles.append(PasswordResetEmailThrottle())
+        return throttles
+
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
